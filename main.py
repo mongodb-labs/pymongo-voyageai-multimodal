@@ -241,7 +241,10 @@ class PyMongoVoyageAI:
         
         # Write the embeddings and serialized inputs to the database in batches.
         # Use ReplaceOne to enable overwriting documents by _id.
-        ids = ids or [str(ObjectId()) for _ in range(len(inputs))]
+        if ids:
+            ids = [ObjectId(i) for i in ids]
+        else:
+            ids = ids or [ObjectId() for _ in range(len(inputs))]
         batch = []
         output_docs = []
         for idx, inp in enumerate(processed_inputs):
@@ -266,11 +269,45 @@ class PyMongoVoyageAI:
             self._coll.bulk_write(operations)
         return output_docs
 
-    def delete(self, ids: list[str | ObjectId], delete_s3_objects: bool = True):
-        pass
+    def delete(self, ids: list[str | ObjectId], delete_s3_objects: bool = True, **kwargs: Any) -> bool:
+        """Delete documents by ids.
 
-    def get_by_ids(self, ids: Sequence[str | ObjectId],extract_images: bool = True) -> list[Document]:
-        pass
+        Args:
+            ids: List of ids to delete.
+            **kwargs: Other keyword arguments passed to Collection.delete_many()
+
+        Returns:
+            Optional[bool]: True if deletion is successful,
+            False otherwise, None if not implemented.
+        """
+        filter = {}
+        oids = [ObjectId(str(i)) for i in ids]
+        filter = {"_id": {"$in": oids}}
+        if delete_s3_objects:
+            for obj in self._coll.find(filter):
+                self._expand_doc(obj, False)
+                for inp in obj['inputs']:
+                    if isinstance(inp, S3Document):
+                        self._s3_client.delete_object(Bucket=inp.bucket_name, Key=inp.object_name)
+        return self._coll.delete_many(filter=filter, **kwargs).acknowledged
+
+    def _expand_doc(self, obj: dict[str, Any], extract_images: bool = True) -> dict[str, Any]:
+        for idx, inp in enumerate(list(obj['inputs'])):
+            if inp['type'] == DocumentType.s3_object:
+                doc = S3Document.model_validate(inp)
+                if extract_images:
+                    doc = self.s3_to_image(doc)
+                obj['inputs'][idx] = doc
+            elif inp['type'] == DocumentType.text:
+                obj['inputs'][idx] = TextDocument.model_validate(inp)
+
+    def get_by_ids(self, ids: Sequence[str | ObjectId], extract_images: bool = True) -> list[Document]:
+        docs = []
+        oids = [ObjectId(i) for i in ids]
+        for doc in self._coll.aggregate([{"$match": {"_id": {"$in": oids}}}]):
+            self._expand_doc(doc, extract_images)
+            docs.append(doc)
+        return docs
 
     def similarity_search(
         self,
@@ -345,14 +382,7 @@ class PyMongoVoyageAI:
         # Format and extract if necessary.
         for res in cursor:
             make_serializable(res)
-            for idx, inp in enumerate(list(res['inputs'])):
-                if inp['type'] == DocumentType.s3_object:
-                    doc = S3Document.model_validate(inp)
-                    if extract_images:
-                        doc = self.s3_to_image(doc)
-                    res['inputs'][idx] = doc
-                elif inp['type'] == DocumentType.text:
-                    res['inputs'][idx] = TextDocument.model_validate(inp)
+            self._expand_doc(res, extract_images)
             docs.append(res)
         return docs
 
@@ -376,6 +406,8 @@ def main():
     print(len(resp))
     data = vo.similarity_search("3D loss landscapes for different training strategies", extract_images=True)
     print(data)
+    print(len(vo.get_by_ids([d['_id'] for d in resp])))
+    vo.delete([d['_id'] for d in resp])
 
 if __name__ == "__main__":
     main()
