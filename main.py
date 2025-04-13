@@ -15,6 +15,7 @@ import botocore.client
 from langchain_mongodb.vectorstores import DEFAULT_INSERT_BATCH_SIZE
 from langchain_mongodb.index import create_vector_search_index
 from langchain_mongodb.pipelines import vector_search_stage
+from langchain_mongodb.utils import make_serializable
 import io
 
 DEFAULT_MODEL_NAME = "voyage-multimodal-3"
@@ -63,10 +64,10 @@ class Document(BaseModel):
 class ImageDocument(Document):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     type: DocumentType = DocumentType.image
-    name: str | None
     image: Image.Image
-    source_url: str | None
-    page_number: int | None
+    name: str | None = None
+    source_url: str | None = None
+    page_number: int | None = None
 
 class URLDocument(Document):
     type: DocumentType = DocumentType.url
@@ -129,16 +130,16 @@ class PyMongoVoyageAI:
         self._s3_client = s3_client or boto3.client('s3', region_name=aws_region_name)
         self._s3_bucket_name = s3_bucket_name
         self._vo_model_name = voyagai_model_name
-        self._coll = coll = self.mo[database_name][collection_name]
+        self._coll = coll = self._mo[database_name][collection_name]
         if auto_create_index and not any(
-            [ix["name"] == self.index_name for ix in coll.list_search_indexes()]
+            [ix["name"] == self._index_name for ix in coll.list_search_indexes()]
         ):
             create_vector_search_index(
                 collection=coll,
-                index_name=self.index_name,
-                dimensions=self.dimensions,
-                path=self.embedding_key,
-                similarity=self.relevance_score_fn,
+                index_name=self._index_name,
+                dimensions=self._dimensions,
+                path=self._embedding_key,
+                similarity=self._relevance_score_fn,
                 wait_until_completes=auto_index_timeout,
             )
 
@@ -146,8 +147,10 @@ class PyMongoVoyageAI:
         if isinstance(document, Image.Image):
             document = ImageDocument(image=document)
         object_name = document.name or str(ObjectId())
-        bucket = self._s3_client.Bucket(self._s3_bucket_name)
-        bucket.upload_fileobj(document.image.tobytes(), object_name)
+        fd = io.BytesIO()
+        document.image.save(fd, "png")
+        fd.seek(0)
+        self._s3_client.upload_fileobj(fd, self._s3_bucket_name, object_name)
         return S3Document(bucket_name=self._s3_bucket_name, object_name=object_name, page_number=document.page_number, source_url=document.source_url, metadata=document.metadata)
 
     def s3_to_image(self, document: S3Document | str) -> ImageDocument:
@@ -179,7 +182,7 @@ class PyMongoVoyageAI:
 
     def add_documents(
         self,
-        inputs: list[list[str | Image.Image | DocumentType]],
+        inputs: list[list[str | Image.Image | Document]],
         ids: list[str] | None = None,
         batch_size: int = DEFAULT_INSERT_BATCH_SIZE,
         **kwargs: Any,
@@ -208,9 +211,9 @@ class PyMongoVoyageAI:
                     processed_inner.append(TextDocument(text=doc))
                     model_inner.append(doc)
                 elif isinstance(doc, Image.Image):
+                    model_inner.append(doc)
                     doc = ImageDocument(image=doc)
                     processed_inner.append(self.image_to_s3(doc))
-                    model_inner.append(doc)
                 elif isinstance(doc, URLDocument):
                     for doc in self.url_to_images(doc):
                         processed_inner.append(self.image_to_s3(doc))
@@ -230,7 +233,7 @@ class PyMongoVoyageAI:
             model_inputs.append(model_inner)
 
         # Create the embeddings for each set of processed model inputs.
-        embeddings = self.vo.multimodal_embed(
+        embeddings = self._vo.multimodal_embed(
                 inputs=model_inputs,
                 model=self._vo_model_name,
                 input_type="document"
@@ -243,14 +246,14 @@ class PyMongoVoyageAI:
         output_docs = []
         for idx, inp in enumerate(processed_inputs):
             output_doc = {
-                self.embedding_key: embeddings[idx],
+                self._embedding_key: embeddings[idx],
                 "inputs": inp,
                 "_id": ids[idx]
             }
             output_docs.append(output_doc)
             doc = {
-                self.embedding_key: embeddings[idx],
-                "inputs": [i.model_dump_json() for i in inp],
+                self._embedding_key: embeddings[idx],
+                "inputs": [i.model_dump() for i in inp],
                 "_id": ids[idx]
             }
             batch.append(doc)
@@ -264,9 +267,9 @@ class PyMongoVoyageAI:
         return output_docs
 
     def delete(self, ids: list[str | ObjectId], delete_s3_objects: bool = True):
-       pass
+        pass
 
-    def get_by_ids(self, ids: Sequence[str | ObjectId], /) -> list[Document]:
+    def get_by_ids(self, ids: Sequence[str | ObjectId],extract_images: bool = True) -> list[Document]:
         pass
 
     def similarity_search(
@@ -280,7 +283,7 @@ class PyMongoVoyageAI:
         include_embeddings: bool = False,
         extract_images: bool = False,
         **kwargs: Any,
-    ) -> list[DocumentType]:  # noqa: E501
+    ) -> list[dict[str, Any]]:  # noqa: E501
         """Return MongoDB documents most similar to the given query.
 
         Atlas Vector Search eliminates the need to run a separate
@@ -306,11 +309,11 @@ class PyMongoVoyageAI:
         """
         # $vectorSearch query followed by a subsequent lookup to the data stored in s3 along with the related metadata provided from Atlas.
         # Each element in the output of the query should contain the payload in Atlas, the singulated s3 image that was looked up, and (if relevant) the original pdf information.
-        query_vector = self.vo.multimodal_embed(
+        query_vector = self._vo.multimodal_embed(
                 inputs=[[query]],
                 model=self._vo_model_name,
                 input_type="document"
-            ).embeddings
+            ).embeddings[0]
         
         # Atlas Vector Search, potentially with filter
         pipeline = [
@@ -322,41 +325,36 @@ class PyMongoVoyageAI:
                 pre_filter,
                 oversampling_factor,
                 **kwargs,
-            ),
-            {"$set": {"score": {"$meta": "vectorSearchScore"}}},
+            )
         ]
+        if include_scores:
+            pipeline.append({"$set": {"score": {"$meta": "vectorSearchScore"}}})
 
         # Remove embeddings unless requested.
         if not include_embeddings:
             pipeline.append({"$project": {self._embedding_key: 0}})
 
-        # Post-processing
+        # Post-processing.
         if post_filter_pipeline is not None:
             pipeline.extend(post_filter_pipeline)
 
-        # Execution
-        cursor = self._collection.aggregate(pipeline)  # type: ignore[arg-type]
+        # Execution.
+        cursor = self._coll.aggregate(pipeline)  # type: ignore[arg-type]
         docs = []
 
-        # Format
+        # Format and extract if necessary.
         for res in cursor:
-            import pdb; pdb.set_trace()
-            pass
-            # score = res.pop("score")
-            # make_serializable(res)
-            # docs.append(
-            #     (Document(page_content=text, metadata=res, id=res["_id"]), score)
-            # )
+            make_serializable(res)
+            for idx, inp in enumerate(list(res['inputs'])):
+                if inp['type'] == DocumentType.s3_object:
+                    doc = S3Document.model_validate(inp)
+                    if extract_images:
+                        doc = self.s3_to_image(doc)
+                    res['inputs'][idx] = doc
+                elif inp['type'] == DocumentType.text:
+                    res['inputs'][idx] = TextDocument.model_validate(inp)
+            docs.append(res)
         return docs
-    
-        stage = {
-            "index": self.index_name,
-            "path": self.embedding_key,
-            "queryVector": query_vector[0],
-            "numCandidates": k * self.oversampling_factor,
-            "limit": k,
-        }
-        return list(self.collection.aggregate([{"$vectorSearch": stage}]))
 
 
 def main():
@@ -371,12 +369,13 @@ def main():
     documents = [[figures[n]] for n in range(len(figures))]
     conn_str = "mongodb://127.0.0.1:27017?directConnection=true"
     vo = PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
-                         s3_bucket_name="pymongo_voyageai", collection_name="test", database_name="tests")
-    vo.add_documents(documents)
-    data = vo.similarity_search("3D loss landscapes for different training strategies")
+                         s3_bucket_name="pymongo-voyageai", collection_name="test", database_name="tests")
+    resp = vo.add_documents(documents)
+    import time
+    time.sleep(3)
+    print(len(resp))
+    data = vo.similarity_search("3D loss landscapes for different training strategies", extract_images=True)
     print(data)
-    import pdb; pdb.set_trace()
-    pass
 
 if __name__ == "__main__":
     main()
