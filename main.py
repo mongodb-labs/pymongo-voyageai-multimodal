@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Sequence
+from typing import Any, Sequence, Mapping
 from enum import Enum
 from voyageai import Client
 import urllib.request
@@ -269,7 +269,7 @@ class PyMongoVoyageAI:
             self._coll.bulk_write(operations)
         return output_docs
 
-    def delete(self, ids: list[str | ObjectId], delete_s3_objects: bool = True, **kwargs: Any) -> bool:
+    def delete_by_ids(self, ids: list[str | ObjectId], delete_s3_objects: bool = True, **kwargs: Any) -> bool:
         """Delete documents by ids.
 
         Args:
@@ -280,9 +280,10 @@ class PyMongoVoyageAI:
             Optional[bool]: True if deletion is successful,
             False otherwise, None if not implemented.
         """
-        filter = {}
         oids = [ObjectId(str(i)) for i in ids]
-        filter = {"_id": {"$in": oids}}
+        return self.delete_many({"_id": {"$in": oids}}, delete_s3_objects=delete_s3_objects, **kwargs)
+
+    def delete_many(self, filter: Mapping[str, Any], delete_s3_objects: bool = True, **kwargs) -> bool:
         if delete_s3_objects:
             for obj in self._coll.find(filter):
                 self._expand_doc(obj, False)
@@ -290,6 +291,9 @@ class PyMongoVoyageAI:
                     if isinstance(inp, S3Document):
                         self._s3_client.delete_object(Bucket=inp.bucket_name, Key=inp.object_name)
         return self._coll.delete_many(filter=filter, **kwargs).acknowledged
+
+    def close(self):
+        self._coll.database.client.close()
 
     def _expand_doc(self, obj: dict[str, Any], extract_images: bool = True) -> dict[str, Any]:
         for idx, inp in enumerate(list(obj['inputs'])):
