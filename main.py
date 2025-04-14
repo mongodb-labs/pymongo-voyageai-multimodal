@@ -17,8 +17,11 @@ from langchain_mongodb.index import create_vector_search_index
 from langchain_mongodb.pipelines import vector_search_stage
 from langchain_mongodb.utils import make_serializable
 import io
+from time import sleep, monotonic
 
 DEFAULT_MODEL_NAME = "voyage-multimodal-3"
+TIMEOUT = 15
+INTERVAL = 1
 logger = logging.getLogger(__file__)
 
 
@@ -104,7 +107,7 @@ class PyMongoVoyageAI:
         relevance_score_fn: str = "cosine",
         dimensions: int = 1024,
         auto_create_index: bool = True,
-        auto_index_timeout: int = 15,
+        auto_index_timeout: int = TIMEOUT,
         **kwargs: Any,
     ):
         """
@@ -171,7 +174,7 @@ class PyMongoVoyageAI:
         i = basename.rfind('.')
         name = basename[:i]
         if url.endswith('.pdf'):
-            for idx, img in pdf_url_to_images(url):
+            for idx, img in enumerate(pdf_url_to_images(url)):
                 images.append(ImageDocument(image=img, name=name, source_url=url, page_number=idx, metadata=document.metadata))
         else:
             with urllib.request.urlopen(url) as response:
@@ -391,6 +394,20 @@ class PyMongoVoyageAI:
         return docs
 
 
+def _wait_for_indexing(client: PyMongoVoyageAI):
+    n_docs = client._coll.count_documents({})
+    start = monotonic()
+    while monotonic() - start <= TIMEOUT:
+        if (
+            len(client.similarity_search("sandwich", k=n_docs, oversampling_factor=1))
+            == n_docs
+        ):
+            return
+        else:
+            sleep(INTERVAL)
+    raise TimeoutError(f"Failed to embed, insert, and index texts in {TIMEOUT}s.")
+
+
 def main():
     import os
     print("Hello from pymongo-voyageai!")
@@ -402,16 +419,33 @@ def main():
     figures = [Image.open(BytesIO(d["bytes"])) for d in datas]
     documents = [[figures[n]] for n in range(len(figures))]
     conn_str = "mongodb://127.0.0.1:27017?directConnection=true"
-    vo = PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
+    client = PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
                          s3_bucket_name="pymongo-voyageai", collection_name="test", database_name="tests")
-    resp = vo.add_documents(documents)
-    import time
-    time.sleep(3)
+    client.delete_many({})
+    resp = client.add_documents(documents)
     print(len(resp))
-    data = vo.similarity_search("3D loss landscapes for different training strategies", extract_images=True)
+    _wait_for_indexing(client)
+    query = "3D loss landscapes for different training strategies"
+    data = client.similarity_search(query, extract_images=True)
     print(data)
-    print(len(vo.get_by_ids([d['_id'] for d in resp])))
-    vo.delete([d['_id'] for d in resp])
+    print(len(client.get_by_ids([d['_id'] for d in resp])))
+    client.delete_by_ids([d['_id'] for d in resp])
+
+    query = "The consequences of a dictator's peace"
+    images = client.url_to_images("https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf")
+    client.add_documents([[img] for img in images])
+    print(len(resp))
+    _wait_for_indexing(client)
+    data = client.similarity_search(query, extract_images=True)
+    print(data)
+    print(len(client.get_by_ids([d['_id'] for d in resp])))
+    client.delete_by_ids([d['_id'] for d in resp])
+    client.close()
+
+    # TODO: add a url input that is a pdf
+
+    # TODO: compare results to the ones in the notebook.
+
 
 if __name__ == "__main__":
     main()
