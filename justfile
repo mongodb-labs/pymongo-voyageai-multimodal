@@ -10,7 +10,7 @@ install:
     uv sync
     uv run pre-commit install
 
-test *args:
+test *args="-v":
 	uv run pytest {{args}}
 
 lint:
@@ -20,7 +20,6 @@ docs:
     uv run sphinx-build -T -b html {{sphinx_opts}} {{docs_build}}
 
 doctest:
-    uv run python -m doctest -v examples/wiki/wiki.py
     uv run sphinx-build -E -b doctest {{sphinx_opts}} {{docs_build}}/doctest
     uv run sphinx-build -b linkcheck {{sphinx_opts}} {{docs_build}}/linkcheck
 

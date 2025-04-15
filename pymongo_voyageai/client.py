@@ -5,7 +5,7 @@ import urllib.request
 from collections.abc import Mapping, Sequence
 from io import BytesIO
 from time import monotonic, sleep
-from typing import Any
+from typing import Any, Sequence
 
 from bson import ObjectId
 from langchain_mongodb.index import create_vector_search_index
@@ -28,7 +28,7 @@ class PyMongoVoyageAI:
         self,
         collection_name: str,
         database_name: str,
-        s3_bucket_name: str | None,
+        s3_bucket_name: str | None = None,
         mongo_client: MongoClient[dict[str, Any]] | None = None,
         mongo_connection_string: str | None = None,
         voyageai_client: Client | None = None,
@@ -66,7 +66,7 @@ class PyMongoVoyageAI:
         if storage_object:
             self._storage = storage_object
         elif s3_bucket_name:
-            self._storage = S3Storage(s3_bucket_name)  # type:ignore[assignment]
+            self._storage = S3Storage(s3_bucket_name)
         else:
             raise ValueError("Must provide an s3 bucket name or a storage object")
         self._vo_model_name = voyagai_model_name
@@ -137,12 +137,14 @@ class PyMongoVoyageAI:
             with urllib.request.urlopen(url) as response:
                 image_data = response.read()
             image = Image.open(BytesIO(image_data))
+            if 'transparency' in image.info and image.mode != 'RGBA':
+                image = image.convert("RGBA")
             images.append(ImageDocument(image=image, name=name, source_url=url, metadata=metadata))
         return images
 
     def add_documents(
         self,
-        inputs: list[str | Image.Image | Document | list[str | Image.Image | Document]],
+        inputs: Sequence[str | Image.Image | Document | Sequence[str | Image.Image | Document]],
         ids: list[str] | None = None,
         batch_size: int = DEFAULT_INSERT_BATCH_SIZE,
         **kwargs: Any,
@@ -167,7 +169,7 @@ class PyMongoVoyageAI:
         for inp in inputs:
             processed_inner: list[Document] = []
             model_inner: list[str | Image.Image] = []
-            if not isinstance(inp, list):
+            if isinstance(inp, (str, Image.Image, Document)):
                 inp = [inp]
             for doc in inp:
                 if isinstance(doc, str):

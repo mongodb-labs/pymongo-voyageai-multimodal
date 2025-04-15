@@ -29,6 +29,7 @@ class StoredDocument(Document):
     type: DocumentType = DocumentType.storage
     root_location: str
     object_name: str
+    name: str | None = None
     source_url: str | None = None
     page_number: int | None = None
 

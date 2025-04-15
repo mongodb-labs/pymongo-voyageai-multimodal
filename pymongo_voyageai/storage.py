@@ -21,7 +21,7 @@ class ImageStorage:
         raise NotImplementedError
 
 
-class S3Storage:
+class S3Storage(ImageStorage):
     def __init__(
         self,
         bucket_name: str,
@@ -32,7 +32,7 @@ class S3Storage:
         self.root_location = bucket_name
 
     def save_image(self, image: ImageDocument) -> StoredDocument:
-        object_name = image.name or str(ObjectId())
+        object_name = str(ObjectId())
         fd = io.BytesIO()
         image.image.save(fd, "png")
         fd.seek(0)
@@ -42,6 +42,7 @@ class S3Storage:
             object_name=object_name,
             page_number=image.page_number,
             source_url=image.source_url,
+            name=image.name,
             metadata=image.metadata,
         )
 
@@ -54,7 +55,7 @@ class S3Storage:
             source_url=document.source_url,
             page_number=document.page_number,
             metadata=document.metadata,
-            name=document.object_name,
+            name=document.name,
         )
 
     def delete_image(self, document: StoredDocument) -> None:
