@@ -59,7 +59,7 @@ def pdf_url_to_images(url: str, start=None, end=None, zoom: float = 1.0) -> list
 
 
 class DocumentType(int, Enum):
-    s3_object = 1
+    storage = 1
     image = 2
     text = 3
 
@@ -75,9 +75,9 @@ class ImageDocument(Document):
     source_url: str | None = None
     page_number: int | None = None
 
-class S3Document(Document):
-    type: DocumentType = DocumentType.s3_object
-    bucket_name: str
+class StoredDocument(Document):
+    type: DocumentType = DocumentType.storage
+    root_location: str
     object_name: str
     source_url: str | None
     page_number: int | None
@@ -87,20 +87,54 @@ class TextDocument(Document):
     text: str
 
 
+class ImageStorage:
+    root_location: str
+
+    def save_image(self, image: ImageDocument) -> StoredDocument:
+        raise NotImplementedError
+
+    def load_image(self, document: StoredDocument) -> ImageDocument:
+        raise NotImplementedError
+    
+    def delete_image(self, document: StoredDocument) -> None:
+        raise NotImplementedError
+
+class S3Storage:
+
+    def __init__(self, bucket_name: str, client: botocore.client.BaseClient | None = None, region_name: str | None = None):
+        self.client = client or boto3.client('s3', region_name=region_name)
+        self.root_location = bucket_name
+
+    def save_image(self, image: ImageDocument) -> StoredDocument:
+        object_name = image.name or str(ObjectId())
+        fd = io.BytesIO()
+        image.image.save(fd, "png")
+        fd.seek(0)
+        self.client.upload_fileobj(fd, self.root_location, object_name)
+        return StoredDocument(root_location=self.root_location, object_name=object_name, page_number=image.page_number, source_url=image.source_url, metadata=image.metadata)
+
+    def load_image(self, document: StoredDocument) -> ImageDocument:
+        buffer = io.BytesIO()
+        self.client.download_fileobj(document.root_location, document.object_name, buffer)
+        image = Image.open(buffer)
+        return ImageDocument(image=image, source_url=document.source_url, page_number=document.page_number, metadata=document.metadata, name=document.object_name)
+
+    def delete_image(self, document: StoredDocument) -> None:
+        self.client.delete_object(Bucket=document.root_location, Key=document.object_name)
+
 class PyMongoVoyageAI:
 
     def __init__(
         self,
-        s3_bucket_name: str,
         collection_name: str,
         database_name: str,
+        s3_bucket_name: str | None,
         mongo_client: MongoClient | None = None,
         mongo_connection_string: str | None = None,
         voyageai_client: Client | None = None,
         voyageai_api_key: str| None = None,
         voyagai_model_name: str = DEFAULT_MODEL_NAME,
-        s3_client: botocore.client.BaseClient | None = None,
-        aws_region_name: str | None = None,
+        storage_object: ImageStorage | None = None,
         index_name: str = "vector_index",
         embedding_key: str = "embedding",
         relevance_score_fn: str = "cosine",
@@ -129,8 +163,12 @@ class PyMongoVoyageAI:
         self._index_name = index_name
         self._embedding_key = embedding_key
         self._relevance_score_fn = relevance_score_fn
-        self._s3_client = s3_client or boto3.client('s3', region_name=aws_region_name)
-        self._s3_bucket_name = s3_bucket_name
+        if storage_object:
+            self._storage = storage_object
+        elif s3_bucket_name:
+            self._storage: ImageStorage = S3Storage(s3_bucket_name)
+        else:
+            raise ValueError("Must provide an s3 bucket name or a storage object")
         self._vo_model_name = voyagai_model_name
         self._coll = coll = self._mo[database_name][collection_name]
         if auto_create_index and not any(
@@ -145,23 +183,15 @@ class PyMongoVoyageAI:
                 wait_until_completes=auto_index_timeout,
             )
 
-    def image_to_s3(self, document: ImageDocument | Image.Image) -> S3Document:
+    def image_to_storage(self, document: ImageDocument | Image.Image) -> StoredDocument:
         if isinstance(document, Image.Image):
             document = ImageDocument(image=document)
-        object_name = document.name or str(ObjectId())
-        fd = io.BytesIO()
-        document.image.save(fd, "png")
-        fd.seek(0)
-        self._s3_client.upload_fileobj(fd, self._s3_bucket_name, object_name)
-        return S3Document(bucket_name=self._s3_bucket_name, object_name=object_name, page_number=document.page_number, source_url=document.source_url, metadata=document.metadata)
+        return self._storage.save_image(document)
 
-    def s3_to_image(self, document: S3Document | str) -> ImageDocument:
+    def storage_to_image(self, document: StoredDocument | str) -> ImageDocument:
         if isinstance(document, str):
-            document = S3Document(bucket_name=self._s3_bucket_name, object_name=document)
-        buffer = io.BytesIO()
-        self._s3_client.download_fileobj(document.bucket_name, document.object_name, buffer)
-        image = Image.open(buffer)
-        return ImageDocument(image=image, source_url=document.source_url, page_number=document.page_number, metadata=document.metadata, name=document.object_name)
+            document = StoredDocument(root_location=self._storage.root_location, object_name=document)
+        return self._storage.load_image(document=document)
 
     def url_to_images(self, url: str, metadata=None, start=0, end=None, image_field=None, **kwargs) -> list[ImageDocument]:
         images = []
@@ -203,10 +233,10 @@ class PyMongoVoyageAI:
                 Tuning this may help with performance and sidestep MongoDB limits.
 
         Returns:
-            A list of the embedded documents, including embeddings, s3 locations if relevant, and any other metadata.
+            A list of the embedded documents, including embeddings, storage locations if relevant, and any other metadata.
         """
         # Process the input documents, creating the metadata to write to the database, as well as the inputs to the model.
-        # Save images to s3 along the way as appropriate.
+        # Save images to storage along the way as appropriate.
         processed_inputs = []
         model_inputs = []
         for inp in inputs:
@@ -220,11 +250,11 @@ class PyMongoVoyageAI:
                 elif isinstance(doc, Image.Image):
                     doc = ImageDocument(image=doc)
                 if isinstance(doc, ImageDocument):
-                    processed_inner.append(self.image_to_s3(doc))
+                    processed_inner.append(self.image_to_storage(doc))
                     model_inner.append(doc.image)
-                elif isinstance(doc, S3Document):
+                elif isinstance(doc, StoredDocument):
                     processed_inner.append(doc)
-                    model_inner.append(self.s3_to_image(doc).image)
+                    model_inner.append(self.storage_to_image(doc).image)
                 elif isinstance(doc, TextDocument):
                     processed_inner.append(doc)
                     model_inner.append(doc.text)
@@ -271,7 +301,7 @@ class PyMongoVoyageAI:
             self._coll.bulk_write(operations)
         return output_docs
 
-    def delete_by_ids(self, ids: list[str | ObjectId], delete_s3_objects: bool = True, **kwargs: Any) -> bool:
+    def delete_by_ids(self, ids: list[str | ObjectId], delete_stored_objects: bool = True, **kwargs: Any) -> bool:
         """Delete documents by ids.
 
         Args:
@@ -283,15 +313,15 @@ class PyMongoVoyageAI:
             False otherwise, None if not implemented.
         """
         oids = [ObjectId(str(i)) for i in ids]
-        return self.delete_many({"_id": {"$in": oids}}, delete_s3_objects=delete_s3_objects, **kwargs)
+        return self.delete_many({"_id": {"$in": oids}}, delete_stored_objects=delete_stored_objects, **kwargs)
 
-    def delete_many(self, filter: Mapping[str, Any], delete_s3_objects: bool = True, **kwargs) -> bool:
-        if delete_s3_objects:
+    def delete_many(self, filter: Mapping[str, Any], delete_stored_objects: bool = True, **kwargs) -> bool:
+        if delete_stored_objects:
             for obj in self._coll.find(filter):
                 self._expand_doc(obj, False)
                 for inp in obj['inputs']:
-                    if isinstance(inp, S3Document):
-                        self._s3_client.delete_object(Bucket=inp.bucket_name, Key=inp.object_name)
+                    if isinstance(inp, StoredDocument):
+                        self._storage.delete_image(inp)
         return self._coll.delete_many(filter=filter, **kwargs).acknowledged
 
     def close(self):
@@ -299,10 +329,10 @@ class PyMongoVoyageAI:
 
     def _expand_doc(self, obj: dict[str, Any], extract_images: bool = True) -> dict[str, Any]:
         for idx, inp in enumerate(list(obj['inputs'])):
-            if inp['type'] == DocumentType.s3_object:
-                doc = S3Document.model_validate(inp)
+            if inp['type'] == DocumentType.storage:
+                doc = StoredDocument.model_validate(inp)
                 if extract_images:
-                    doc = self.s3_to_image(doc)
+                    doc = self.storage_to_image(doc)
                 obj['inputs'][idx] = doc
             elif inp['type'] == DocumentType.text:
                 obj['inputs'][idx] = TextDocument.model_validate(inp)
@@ -350,8 +380,6 @@ class PyMongoVoyageAI:
         Returns:
             List of documents most similar to the query and their scores.
         """
-        # $vectorSearch query followed by a subsequent lookup to the data stored in s3 along with the related metadata provided from Atlas.
-        # Each element in the output of the query should contain the payload in Atlas, the singulated s3 image that was looked up, and (if relevant) the original pdf information.
         query_vector = self._vo.multimodal_embed(
                 inputs=[[query]],
                 model=self._vo_model_name,
