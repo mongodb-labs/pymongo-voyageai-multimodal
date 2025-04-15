@@ -480,17 +480,23 @@ def test_pdf_per_page(client: PyMongoVoyageAI):
 
 
 def test_pdf_per_document(client: PyMongoVoyageAI):
-    # TODO
-    pass
+    query = "The consequences of a dictator's peace"
+    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
+    url_doc = URLDocument(url=url, embed_type=EmbedType.per_document)
+    resp = client.add_documents(url_doc, "Some other text")
+    _wait_for_indexing(client)
+    data = client.similarity_search(query, extract_images=False)
+    import pdb; pdb.set_trace()
+    assert len(data[0]['inputs']) == 50
 
 
 def main():
     print("Hello from pymongo-voyageai!")
     client = get_client()
     client.delete_many({})
-    test_image_set(client)
-    test_pdf_per_page(client)
-    test_text_and_images(client)
+    # test_image_set(client)
+    # test_pdf_per_page(client)
+    # test_text_and_images(client)
     test_pdf_per_document(client)
     client.close()
 
