@@ -2,6 +2,7 @@ import io
 import urllib.request
 
 from PIL import Image
+
 try:
     import fitz  # type:ignore[import-untyped]
 except ImportError:
@@ -13,7 +14,9 @@ TIMEOUT = 15
 INTERVAL = 1
 
 
-def pdf_url_to_images(url: str, start: int | None =None, end: int|None=None, zoom: float = 1.0) -> list[Image.Image]:
+def pdf_url_to_images(
+    url: str, start: int | None = None, end: int | None = None, zoom: float = 1.0
+) -> list[Image.Image]:
     if fitz is None:
         raise ValueError("pymongo-voyageai requires PyMuPDF to read pdf files") from None
     # Ensure that the URL is valid
@@ -40,7 +43,7 @@ def pdf_url_to_images(url: str, start: int | None =None, end: int|None=None, zoo
         # Convert pixmap to PIL Image
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         images.append(img)
-    print('out of loop')
+    print("out of loop")
 
     # Close the document
     pdf.close()

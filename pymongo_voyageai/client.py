@@ -5,7 +5,7 @@ import urllib.request
 from collections.abc import Mapping, Sequence
 from io import BytesIO
 from time import monotonic, sleep
-from typing import Any, Sequence
+from typing import Any
 
 from bson import ObjectId
 from langchain_mongodb.index import create_vector_search_index
@@ -96,7 +96,13 @@ class PyMongoVoyageAI:
         return self._storage.load_image(document=document)
 
     def url_to_images(
-        self, url: str, metadata: dict[str, Any] | None =None, start: int=0, end: int | None=None, image_column: str | None =None, **kwargs: Any
+        self,
+        url: str,
+        metadata: dict[str, Any] | None = None,
+        start: int = 0,
+        end: int | None = None,
+        image_column: str | None = None,
+        **kwargs: Any,
     ) -> list[ImageDocument]:
         images = []
         i = url.rfind("/") + 1
@@ -137,7 +143,7 @@ class PyMongoVoyageAI:
             with urllib.request.urlopen(url) as response:
                 image_data = response.read()
             image = Image.open(BytesIO(image_data))
-            if 'transparency' in image.info and image.mode != 'RGBA':
+            if "transparency" in image.info and image.mode != "RGBA":
                 image = image.convert("RGBA")
             images.append(ImageDocument(image=image, name=name, source_url=url, metadata=metadata))
         return images
@@ -169,7 +175,7 @@ class PyMongoVoyageAI:
         for inp in inputs:
             processed_inner: list[Document] = []
             model_inner: list[str | Image.Image] = []
-            if isinstance(inp, (str, Image.Image, Document)):
+            if isinstance(inp, (str, Image.Image, Document)):  # noqa:UP038
                 inp = [inp]
             for doc in inp:
                 if isinstance(doc, str):
@@ -205,7 +211,11 @@ class PyMongoVoyageAI:
         batch = []
         output_docs = []
         for idx, proc_inp in enumerate(processed_inputs):
-            output_doc = {self._embedding_key: embeddings[idx], "inputs": proc_inp, "_id": obj_ids[idx]}
+            output_doc = {
+                self._embedding_key: embeddings[idx],
+                "inputs": proc_inp,
+                "_id": obj_ids[idx],
+            }
             output_docs.append(output_doc)
             pymongo_doc = {
                 self._embedding_key: embeddings[idx],
@@ -275,7 +285,7 @@ class PyMongoVoyageAI:
             docs.append(doc)
         return docs
 
-    def wait_for_indexing(self, timeout: int=TIMEOUT, interval:int=INTERVAL) -> None:
+    def wait_for_indexing(self, timeout: int = TIMEOUT, interval: int = INTERVAL) -> None:
         n_docs = self._coll.count_documents({})
         start = monotonic()
         while monotonic() - start <= timeout:
@@ -322,7 +332,9 @@ class PyMongoVoyageAI:
             List of documents most similar to the query and their scores.
         """
         query_vector = self._vo.multimodal_embed(
-            inputs=[[query]], model=self._vo_model_name, input_type="document"  # type:ignore[arg-type]
+            inputs=[[query]],
+            model=self._vo_model_name,
+            input_type="document",  # type:ignore[arg-type]
         ).embeddings[0]
 
         # Atlas Vector Search, potentially with filter
