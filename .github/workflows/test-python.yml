@@ -1,0 +1,107 @@
+name: Python Tests
+
+on:
+  push:
+      branches: ["main"]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -eux {0}
+
+env:
+  MIN_PYTHON: "3.9"
+  MIN_MONGODB: "4.0"
+  MAX_MONGODB: "8.0"
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        python-version: ${{ matrix.python-version }}
+    - uses: extractions/setup-just@v3
+    - run: just install
+    - run: just lint
+    - run: just docs
+    - run: just doctest
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+      fail-fast: false
+    name: CPython ${{ matrix.python-version }}-${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - uses: extractions/setup-just@v3
+      - name: Start MongoDB on Linux
+        if: ${{ startsWith(runner.os, 'Linux') }}
+        uses: supercharge/mongodb-github-action@1.12.0
+        with:
+          mongodb-version: ${{ env.MAX_MONGODB }}
+          mongodb-replica-set: test-rs
+      - name: Start MongoDB on MacOS
+        if: ${{ startsWith(runner.os, 'macOS') }}
+        run: |
+          brew tap mongodb/brew
+          brew install mongodb/brew/mongodb-community@${MAX_MONGODB}
+          brew services start mongodb-community@${MAX_MONGODB}
+      - name: Start MongoDB on Windows
+        if: ${{ startsWith(runner.os, 'Windows') }}
+        shell: powershell
+        run: |
+          mkdir data
+          mongod --remove
+          mongod --install --dbpath=$(pwd)/data --logpath=$PWD/mongo.log
+          net start MongoDB
+      - run: just install
+      - run: just test
+
+  build-min:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        python-version: ${{ env.MIN_PYTHON }}
+    - uses: extractions/setup-just@v3
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        python-version: ${{ env.MIN_PYTHON }}
+    - uses: extractions/setup-just@v3
+    - uses: supercharge/mongodb-github-action@1.12.0
+      with:
+        mongodb-version: ${{ env.MIN_MONGODB }}
+        mongodb-replica-set: test-rs
+    - name: Run unit tests with minimum dependency versions
+      run: |
+        uv sync --python=${MIN_PYTHON} --resolution=lowest-direct
+        just test

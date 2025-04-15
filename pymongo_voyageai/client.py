@@ -1,126 +1,23 @@
 from __future__ import annotations
 from typing import Any, Sequence, Mapping
-from enum import Enum
 from voyageai import Client
 import urllib.request
 from PIL import Image
 from io import BytesIO
 from pymongo import MongoClient, ReplaceOne
 import logging
-import fitz
-from pydantic import BaseModel, ConfigDict
-import boto3
 from bson import ObjectId
-import botocore.client
 from langchain_mongodb.vectorstores import DEFAULT_INSERT_BATCH_SIZE
 from langchain_mongodb.index import create_vector_search_index
 from langchain_mongodb.pipelines import vector_search_stage
 from langchain_mongodb.utils import make_serializable
-import io
 from time import sleep, monotonic
 
-DEFAULT_MODEL_NAME = "voyage-multimodal-3"
-TIMEOUT = 15
-INTERVAL = 1
+from .utils import TIMEOUT, INTERVAL, pdf_url_to_images, DEFAULT_MODEL_NAME
+from .document import Document, ImageDocument, TextDocument, StoredDocument, DocumentType
+from .storage import ImageStorage, S3Storage
+
 logger = logging.getLogger(__file__)
-
-
-def pdf_url_to_images(url: str, start=None, end=None, zoom: float = 1.0) -> list[Image.Image]:
-
-    # Ensure that the URL is valid
-    if not url.startswith("http") and url.endswith(".pdf"):
-        raise ValueError("Invalid URL")
-
-    # Read the PDF from the specified URL
-    with urllib.request.urlopen(url) as response:
-        pdf_data = response.read()
-    pdf_stream = BytesIO(pdf_data)
-    pdf = fitz.open(stream=pdf_stream, filetype="pdf")
-
-    images = []
-
-    # Loop through each page, render as pixmap, and convert to PIL Image
-    mat = fitz.Matrix(zoom, zoom)
-    start = start or 0
-    end = end or pdf.page_count - 1
-    for n in range(pdf.page_count):
-        if n < start or n >= end:
-            continue
-        pix = pdf[n].get_pixmap(matrix=mat)
-
-        # Convert pixmap to PIL Image
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        images.append(img)
-
-    # Close the document
-    pdf.close()
-
-    return images
-
-
-class DocumentType(int, Enum):
-    storage = 1
-    image = 2
-    text = 3
-
-class Document(BaseModel):
-    type: DocumentType
-    metadata: dict[str, Any] | None = None
-
-class ImageDocument(Document):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    type: DocumentType = DocumentType.image
-    image: Image.Image
-    name: str | None = None
-    source_url: str | None = None
-    page_number: int | None = None
-
-class StoredDocument(Document):
-    type: DocumentType = DocumentType.storage
-    root_location: str
-    object_name: str
-    source_url: str | None
-    page_number: int | None
-
-class TextDocument(Document):
-    type: DocumentType= DocumentType.text
-    text: str
-
-
-class ImageStorage:
-    root_location: str
-
-    def save_image(self, image: ImageDocument) -> StoredDocument:
-        raise NotImplementedError
-
-    def load_image(self, document: StoredDocument) -> ImageDocument:
-        raise NotImplementedError
-    
-    def delete_image(self, document: StoredDocument) -> None:
-        raise NotImplementedError
-
-class S3Storage:
-
-    def __init__(self, bucket_name: str, client: botocore.client.BaseClient | None = None, region_name: str | None = None):
-        self.client = client or boto3.client('s3', region_name=region_name)
-        self.root_location = bucket_name
-
-    def save_image(self, image: ImageDocument) -> StoredDocument:
-        object_name = image.name or str(ObjectId())
-        fd = io.BytesIO()
-        image.image.save(fd, "png")
-        fd.seek(0)
-        self.client.upload_fileobj(fd, self.root_location, object_name)
-        return StoredDocument(root_location=self.root_location, object_name=object_name, page_number=image.page_number, source_url=image.source_url, metadata=image.metadata)
-
-    def load_image(self, document: StoredDocument) -> ImageDocument:
-        buffer = io.BytesIO()
-        self.client.download_fileobj(document.root_location, document.object_name, buffer)
-        image = Image.open(buffer)
-        return ImageDocument(image=image, source_url=document.source_url, page_number=document.page_number, metadata=document.metadata, name=document.object_name)
-
-    def delete_image(self, document: StoredDocument) -> None:
-        self.client.delete_object(Bucket=document.root_location, Key=document.object_name)
 
 class PyMongoVoyageAI:
 
@@ -193,16 +90,20 @@ class PyMongoVoyageAI:
             document = StoredDocument(root_location=self._storage.root_location, object_name=document)
         return self._storage.load_image(document=document)
 
-    def url_to_images(self, url: str, metadata=None, start=0, end=None, image_field=None, **kwargs) -> list[ImageDocument]:
+    def url_to_images(self, url: str, metadata=None, start=0, end=None, image_column=None, **kwargs) -> list[ImageDocument]:
         images = []
         i = url.rfind('/') + 1 
         basename = url[i:]
         i = basename.rfind('.')
         name = basename[:i]
         if url.endswith(".parquet"):
-            if image_field is None:
+            try:
+                import pandas as pd
+            except ImportError:
+                raise ValueError("pymongo-voyageai requires pandas to read parquet files")
+            if image_column is None:
                 raise ValueError("Must supply and image field to read a parquet file")
-            column = pd.read_parquet(url, **kwargs)[image_field][start:end]
+            column = pd.read_parquet(url, **kwargs)[image_column][start:end]
             for idx, item in enumerate(column.tolist()):
                 image = Image.open(BytesIO(item["bytes"]))
                 images.append(ImageDocument(image=image, name=name, source_url=url, page_number=idx+start, metadata=metadata))
@@ -344,6 +245,20 @@ class PyMongoVoyageAI:
             self._expand_doc(doc, extract_images)
             docs.append(doc)
         return docs
+    
+    def wait_for_indexing(self, timeout=TIMEOUT, interval=INTERVAL):
+        n_docs = self._coll.count_documents({})
+        start = monotonic()
+        while monotonic() - start <= timeout:
+            if (
+                len(self.similarity_search("sandwich", k=n_docs, oversampling_factor=1))
+                == n_docs
+            ):
+                return
+            else:
+                sleep(interval)
+
+        raise TimeoutError(f"Failed to embed, insert, and index texts in {timeout}s.")
 
     def similarity_search(
         self,
@@ -419,87 +334,3 @@ class PyMongoVoyageAI:
             self._expand_doc(res, extract_images)
             docs.append(res)
         return docs
-
-
-##############
-# Inline tests
-##############
-import pandas as pd
-import numpy as np
-import os
-
-def get_client() -> PyMongoVoyageAI:
-    conn_str = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017?directConnection=true")
-    return PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
-                           s3_bucket_name="pymongo-voyageai", collection_name="test", database_name="tests")
-
-
-def _wait_for_indexing(client: PyMongoVoyageAI):
-    n_docs = client._coll.count_documents({})
-    start = monotonic()
-    while monotonic() - start <= TIMEOUT:
-        if (
-            len(client.similarity_search("sandwich", k=n_docs, oversampling_factor=1))
-            == n_docs
-        ):
-            return
-        else:
-            sleep(INTERVAL)
-    raise TimeoutError(f"Failed to embed, insert, and index texts in {TIMEOUT}s.")
-
-
-def test_image_set(client: PyMongoVoyageAI):
-    url = "hf://datasets/princeton-nlp/CharXiv/val.parquet"
-    documents = client.url_to_images(url, image_field="image", end=3)
-    resp = client.add_documents(documents)
-    _wait_for_indexing(client)
-    query = "3D loss landscapes for different training strategies"
-    data = client.similarity_search(query, extract_images=True)
-    # The best match should be the third input image.
-    assert data[0]['inputs'][0].image.tobytes() == documents[2].image.tobytes()
-    client.delete_by_ids([d['_id'] for d in resp])
-
-
-def test_text_and_images(client: PyMongoVoyageAI):
-    text = "Voyage AI makes best-in-class embedding models and rerankers."
-    images = client.url_to_images("https://www.voyageai.com/header-bg.png")
-    image = images[0].image
-    documents = [
-        [text],         # 0. single text
-        [image],        # 1. single image
-        [text, image],  # 2. text + image
-        [image, text],  # 3. image + text
-    ]
-    resp = client.add_documents(documents)
-    _wait_for_indexing(client)
-    # The interleaved inputs should have different but similar embeddings.
-    embeddings = [d['embedding'] for d in resp]
-    assert embeddings[2] != embeddings[3]
-    assert np.dot(embeddings[2], embeddings[3]) > 0.95
-    client.delete_by_ids([d['_id'] for d in resp])
-
-
-def test_pdf_pages(client: PyMongoVoyageAI):
-    query = "The consequences of a dictator's peace"
-    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
-    images = client.url_to_images(url)
-    resp = client.add_documents(images)
-    _wait_for_indexing(client)
-    data = client.similarity_search(query, extract_images=True)
-    # We expect page 5 to be the best match.
-    assert data[0]['inputs'][0].page_number == 5
-    assert len(client.get_by_ids([d['_id'] for d in resp])) == len(resp)
-    client.delete_by_ids([d['_id'] for d in resp])
-
-
-def main():
-    print("Hello from pymongo-voyageai!")
-    client = get_client()
-    client.delete_many({})
-    test_image_set(client)
-    test_pdf_pages(client)
-    test_text_and_images(client)
-    client.close()
-
-if __name__ == "__main__":
-    main()

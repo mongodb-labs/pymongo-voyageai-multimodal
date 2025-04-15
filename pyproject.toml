@@ -1,16 +1,94 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "pymongo-voyageai"
-version = "0.1.0"
-description = "Add your description here"
+dynamic = ["version"]
+description = "PyMongo integration with VoyageAI for multimodal embedding"
 readme = "README.md"
-requires-python = ">=3.12"
+license = { file="LICENSE" }
+requires-python = ">=3.9"
+authors = [
+    { name = "Steve Silvester", email = "steve.silvester@mongodb.com" },
+]
+classifiers = [
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "boto3>=1.37.25",
     "langchain-mongodb>=0.6.0",
-    "numpy>=2.2.4",
-    "pandas>=2.2.3",
-    "pyarrow>=19.0.1",
     "pymongo>=4.12.0",
-    "pymupdf>=1.25.5",
     "voyageai>=0.3.0",
+]
+
+[project.urls]
+Download = "https://github.com/mongodb-labs/pymongo-voyageai/tags"
+Homepage = "http://pymongo-voyageai.readthedocs.org/"
+
+[dependency-groups]
+dev = [
+    "numpy>=2.0.2",
+    "pandas>=2.2.3",
+    "pytest>=8.3.5",
+    "pymupdf>=1.25.5",
+]
+
+
+[tool.hatch.version]
+path = "pymongo_voyageai/_version.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pymongo_voyageai",
+]
+
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
+log_cli_level = "info"
+testpaths = [
+  "tests",
+]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disable_error_code = ["no-untyped-def", "no-untyped-call"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+]
+unfixable = [
+  "RUF100", # Unused noqa
+  "T20",  # Removes print statements
+  "F401",  # Unused imports
 ]
