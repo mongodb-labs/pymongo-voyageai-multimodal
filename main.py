@@ -25,7 +25,7 @@ INTERVAL = 1
 logger = logging.getLogger(__file__)
 
 
-def pdf_url_to_images(url: str, zoom: float = 1.0) -> list[Image.Image]:
+def pdf_url_to_images(url: str, start=None, end=None, zoom: float = 1.0) -> list[Image.Image]:
 
     # Ensure that the URL is valid
     if not url.startswith("http") and url.endswith(".pdf"):
@@ -41,7 +41,11 @@ def pdf_url_to_images(url: str, zoom: float = 1.0) -> list[Image.Image]:
 
     # Loop through each page, render as pixmap, and convert to PIL Image
     mat = fitz.Matrix(zoom, zoom)
+    start = start or 0
+    end = end or pdf.page_count - 1
     for n in range(pdf.page_count):
+        if n < start or n >= end:
+            continue
         pix = pdf[n].get_pixmap(matrix=mat)
 
         # Convert pixmap to PIL Image
@@ -57,12 +61,7 @@ def pdf_url_to_images(url: str, zoom: float = 1.0) -> list[Image.Image]:
 class DocumentType(int, Enum):
     s3_object = 1
     image = 2
-    url = 3
-    text = 4
-
-class EmbedType(int, Enum):
-    per_page = 1
-    per_document = 2
+    text = 3
 
 class Document(BaseModel):
     type: DocumentType
@@ -75,11 +74,6 @@ class ImageDocument(Document):
     name: str | None = None
     source_url: str | None = None
     page_number: int | None = None
-
-class URLDocument(Document):
-    type: DocumentType = DocumentType.url
-    url: str
-    embed_type: EmbedType = EmbedType.per_page
 
 class S3Document(Document):
     type: DocumentType = DocumentType.s3_object
@@ -169,33 +163,37 @@ class PyMongoVoyageAI:
         image = Image.open(buffer)
         return ImageDocument(image=image, source_url=document.source_url, page_number=document.page_number, metadata=document.metadata, name=document.object_name)
 
-    def url_to_images(self, document: URLDocument | str) -> list[ImageDocument]:
-        if isinstance(document, str):
-            document = URLDocument(url=document)
-        url = document.url
+    def url_to_images(self, url: str, metadata=None, start=0, end=None, image_field=None, **kwargs) -> list[ImageDocument]:
         images = []
         i = url.rfind('/') + 1 
         basename = url[i:]
         i = basename.rfind('.')
         name = basename[:i]
-        if url.endswith('.pdf'):
-            for idx, img in enumerate(pdf_url_to_images(url)):
-                images.append(ImageDocument(image=img, name=name, source_url=url, page_number=idx, metadata=document.metadata))
+        if url.endswith(".parquet"):
+            if image_field is None:
+                raise ValueError("Must supply and image field to read a parquet file")
+            column = pd.read_parquet(url, **kwargs)[image_field][start:end]
+            for idx, item in enumerate(column.tolist()):
+                image = Image.open(BytesIO(item["bytes"]))
+                images.append(ImageDocument(image=image, name=name, source_url=url, page_number=idx+start, metadata=metadata))
+        elif url.endswith('.pdf'):
+            for idx, img in enumerate(pdf_url_to_images(url, start=start, end=end, **kwargs)):
+                images.append(ImageDocument(image=img, name=name, source_url=url, page_number=idx+start, metadata=metadata))
         else:
             with urllib.request.urlopen(url) as response:
                 image_data = response.read()
             image = Image.open(BytesIO(image_data))
-            images.append(ImageDocument(image=image, name=name, source_url=url, metadata=document.metadata))
+            images.append(ImageDocument(image=image, name=name, source_url=url, metadata=metadata))
         return images
 
     def add_documents(
         self,
-        *inputs: list[str | Image.Image | Document] | Document,
+        inputs: list[list[str | Image.Image | Document]],
         ids: list[str] | None = None,
         batch_size: int = DEFAULT_INSERT_BATCH_SIZE,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Add documents to the vectorstore.
+        """Add multimodal documents to the vectorstore.
 
         Args:
             inputs: List of inputs to add to the vectorstore, which are each a list of documents.
@@ -218,22 +216,12 @@ class PyMongoVoyageAI:
                 inp = [inp]
             for doc in inp:
                 if isinstance(doc, str):
+                    doc = TextDocument(text=doc)
+                elif isinstance(doc, Image.Image):
+                    doc = ImageDocument(image=doc)
                     processed_inner.append(TextDocument(text=doc))
                     model_inner.append(doc)
-                elif isinstance(doc, Image.Image):
-                    model_inner.append(doc)
-                    doc = ImageDocument(image=doc)
-                    processed_inner.append(self.image_to_s3(doc))
-                elif isinstance(doc, URLDocument):
-                    images = self.url_to_images(doc)
-                    if doc.embed_type == EmbedType.per_document:
-                        for doc in images:
-                            processed_inner.append(self.image_to_s3(doc))
-                            model_inner.append(doc.image)
-                    else:
-                        processed_inputs.extend([self.image_to_s3(img)] for img in images)
-                        model_inputs.extend([img.image] for img in images)
-                elif isinstance(doc, ImageDocument):
+                if isinstance(doc, ImageDocument):
                     processed_inner.append(self.image_to_s3(doc))
                     model_inner.append(doc.image)
                 elif isinstance(doc, S3Document):
@@ -435,16 +423,15 @@ def _wait_for_indexing(client: PyMongoVoyageAI):
 
 
 def test_image_set(client: PyMongoVoyageAI):
-    df = pd.read_parquet("hf://datasets/princeton-nlp/CharXiv/val.parquet")
-    datas = df["image"].head(3).tolist()
-    figures = [Image.open(BytesIO(d["bytes"])) for d in datas]
+    url = "hf://datasets/princeton-nlp/CharXiv/val.parquet"
+    figures = client.url_to_images(url, image_field="image", end=3)
     documents = [[figures[n]] for n in range(len(figures))]
-    resp = client.add_documents(*documents)
+    resp = client.add_documents(documents)
     _wait_for_indexing(client)
     query = "3D loss landscapes for different training strategies"
     data = client.similarity_search(query, extract_images=True)
     # The best match should be the third input image.
-    assert data[0]['inputs'][0].image.tobytes() == figures[2].tobytes()
+    assert data[0]['inputs'][0].image.tobytes() == figures[2].image.tobytes()
     client.delete_by_ids([d['_id'] for d in resp])
 
 
@@ -458,7 +445,7 @@ def test_text_and_images(client: PyMongoVoyageAI):
         [text, image],  # 2. text + image
         [image, text],  # 3. image + text
     ]
-    resp = client.add_documents(*documents)
+    resp = client.add_documents(documents)
     _wait_for_indexing(client)
     # The interleaved inputs should have different but similar embeddings.
     embeddings = [d['embedding'] for d in resp]
@@ -467,10 +454,11 @@ def test_text_and_images(client: PyMongoVoyageAI):
     client.delete_by_ids([d['_id'] for d in resp])
 
 
-def test_pdf_per_page(client: PyMongoVoyageAI):
+def test_pdf_pages(client: PyMongoVoyageAI):
     query = "The consequences of a dictator's peace"
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
-    resp = client.add_documents(URLDocument(url=url))
+    images = client.url_to_images(url)
+    resp = client.add_documents([[images[i]] for i in range(len(images))])
     _wait_for_indexing(client)
     data = client.similarity_search(query, extract_images=True)
     # We expect page 5 to be the best match.
@@ -479,26 +467,16 @@ def test_pdf_per_page(client: PyMongoVoyageAI):
     client.delete_by_ids([d['_id'] for d in resp])
 
 
-def test_pdf_per_document(client: PyMongoVoyageAI):
-    query = "The consequences of a dictator's peace"
-    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
-    url_doc = URLDocument(url=url, embed_type=EmbedType.per_document)
-    resp = client.add_documents(url_doc, "Some other text")
-    _wait_for_indexing(client)
-    data = client.similarity_search(query, extract_images=False)
-    import pdb; pdb.set_trace()
-    assert len(data[0]['inputs']) == 50
-
-
 def main():
     print("Hello from pymongo-voyageai!")
     client = get_client()
     client.delete_many({})
-    # test_image_set(client)
-    # test_pdf_per_page(client)
-    # test_text_and_images(client)
-    test_pdf_per_document(client)
+    test_image_set(client)
+    test_pdf_pages(client)
+    test_text_and_images(client)
     client.close()
+
+    # We should accept a storage class
 
 if __name__ == "__main__":
     main()
