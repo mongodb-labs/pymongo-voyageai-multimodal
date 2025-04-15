@@ -407,6 +407,19 @@ class PyMongoVoyageAI:
         return docs
 
 
+##############
+# Inline tests
+##############
+import pandas as pd
+import numpy as np
+import os
+
+def get_client() -> PyMongoVoyageAI:
+    conn_str = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017?directConnection=true")
+    return PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
+                           s3_bucket_name="pymongo-voyageai", collection_name="test", database_name="tests")
+
+
 def _wait_for_indexing(client: PyMongoVoyageAI):
     n_docs = client._coll.count_documents({})
     start = monotonic()
@@ -421,15 +434,7 @@ def _wait_for_indexing(client: PyMongoVoyageAI):
     raise TimeoutError(f"Failed to embed, insert, and index texts in {TIMEOUT}s.")
 
 
-def main():
-    import os
-    print("Hello from pymongo-voyageai!")
-    conn_str = "mongodb://127.0.0.1:27017?directConnection=true"
-    client = PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
-                         s3_bucket_name="pymongo-voyageai", collection_name="test", database_name="tests")
-    client.delete_many({})
-
-    import pandas as pd
+def test_image_set(client: PyMongoVoyageAI):
     df = pd.read_parquet("hf://datasets/princeton-nlp/CharXiv/val.parquet")
     datas = df["image"].head(3).tolist()
     figures = [Image.open(BytesIO(d["bytes"])) for d in datas]
@@ -442,20 +447,52 @@ def main():
     assert data[0]['inputs'][0].image.tobytes() == figures[2].tobytes()
     client.delete_by_ids([d['_id'] for d in resp])
 
+
+def test_text_and_images(client: PyMongoVoyageAI):
+    text = "Voyage AI makes best-in-class embedding models and rerankers."
+    images = client.url_to_images("https://www.voyageai.com/header-bg.png")
+    image = images[0].image
+    documents = [
+        [text],         # 0. single text
+        [image],        # 1. single image
+        [text, image],  # 2. text + image
+        [image, text],  # 3. image + text
+    ]
+    resp = client.add_documents(*documents)
+    _wait_for_indexing(client)
+    # The interleaved inputs should have different but similar embeddings.
+    embeddings = [d['embedding'] for d in resp]
+    assert embeddings[2] != embeddings[3]
+    assert np.dot(embeddings[2], embeddings[3]) > 0.95
+    client.delete_by_ids([d['_id'] for d in resp])
+
+
+def test_pdf_per_page(client: PyMongoVoyageAI):
     query = "The consequences of a dictator's peace"
-    resp = client.add_documents(URLDocument(url="https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"))
+    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
+    resp = client.add_documents(URLDocument(url=url))
     _wait_for_indexing(client)
     data = client.similarity_search(query, extract_images=True)
-    # We expect page 5 to be the best match
+    # We expect page 5 to be the best match.
     assert data[0]['inputs'][0].page_number == 5
     assert len(client.get_by_ids([d['_id'] for d in resp])) == len(resp)
     client.delete_by_ids([d['_id'] for d in resp])
 
-    # TODO: compare results to the ones in the notebook.
-    # https://colab.research.google.com/drive/12aFvstG8YFAWXyw-Bx5IXtaOqOzliGt9#scrollTo=brAeuCD3_xNv
+
+def test_pdf_per_document(client: PyMongoVoyageAI):
+    # TODO
+    pass
 
 
-    # TODO: add a test that uses the other embed_type
+def main():
+    print("Hello from pymongo-voyageai!")
+    client = get_client()
+    client.delete_many({})
+    test_image_set(client)
+    test_pdf_per_page(client)
+    test_text_and_images(client)
+    test_pdf_per_document(client)
+    client.close()
 
 if __name__ == "__main__":
     main()
