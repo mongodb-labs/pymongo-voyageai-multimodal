@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import os
 import sys
-import furo  # noqa: F401
+
+import furo  # type:ignore[import-untyped] # noqa: F401
 
 sys.path.insert(0, os.path.abspath(".."))
 
