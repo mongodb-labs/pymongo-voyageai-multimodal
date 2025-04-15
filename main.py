@@ -54,11 +54,15 @@ def pdf_url_to_images(url: str, zoom: float = 1.0) -> list[Image.Image]:
     return images
 
 
-class DocumentType(str, Enum):
+class DocumentType(int, Enum):
     s3_object = 1
     image = 2
     url = 3
     text = 4
+
+class EmbedType(int, Enum):
+    per_page = 1
+    per_document = 2
 
 class Document(BaseModel):
     type: DocumentType
@@ -75,6 +79,7 @@ class ImageDocument(Document):
 class URLDocument(Document):
     type: DocumentType = DocumentType.url
     url: str
+    embed_type: EmbedType = EmbedType.per_page
 
 class S3Document(Document):
     type: DocumentType = DocumentType.s3_object
@@ -185,7 +190,7 @@ class PyMongoVoyageAI:
 
     def add_documents(
         self,
-        inputs: list[list[str | Image.Image | Document]],
+        *inputs: list[str | Image.Image | Document] | Document,
         ids: list[str] | None = None,
         batch_size: int = DEFAULT_INSERT_BATCH_SIZE,
         **kwargs: Any,
@@ -209,6 +214,8 @@ class PyMongoVoyageAI:
         for inp in inputs:
             processed_inner = []
             model_inner = []
+            if not isinstance(inp, list):
+                inp = [inp]
             for doc in inp:
                 if isinstance(doc, str):
                     processed_inner.append(TextDocument(text=doc))
@@ -218,9 +225,14 @@ class PyMongoVoyageAI:
                     doc = ImageDocument(image=doc)
                     processed_inner.append(self.image_to_s3(doc))
                 elif isinstance(doc, URLDocument):
-                    for doc in self.url_to_images(doc):
-                        processed_inner.append(self.image_to_s3(doc))
-                        model_inner.append(doc.image)
+                    images = self.url_to_images(doc)
+                    if doc.embed_type == EmbedType.per_document:
+                        for doc in images:
+                            processed_inner.append(self.image_to_s3(doc))
+                            model_inner.append(doc.image)
+                    else:
+                        processed_inputs.extend([self.image_to_s3(img)] for img in images)
+                        model_inputs.extend([img.image] for img in images)
                 elif isinstance(doc, ImageDocument):
                     processed_inner.append(self.image_to_s3(doc))
                     model_inner.append(doc.image)
@@ -232,8 +244,9 @@ class PyMongoVoyageAI:
                     model_inner.append(doc.text)
                 else:
                     raise ValueError(f"Cannot process item of type {type(doc)}")
-            processed_inputs.append(processed_inner)
-            model_inputs.append(model_inner)
+            if processed_inner:
+                processed_inputs.append(processed_inner)
+                model_inputs.append(model_inner)
 
         # Create the embeddings for each set of processed model inputs.
         embeddings = self._vo.multimodal_embed(
@@ -247,7 +260,7 @@ class PyMongoVoyageAI:
         if ids:
             ids = [ObjectId(i) for i in ids]
         else:
-            ids = ids or [ObjectId() for _ in range(len(inputs))]
+            ids = ids or [ObjectId() for _ in range(len(processed_inputs))]
         batch = []
         output_docs = []
         for idx, inp in enumerate(processed_inputs):
@@ -411,41 +424,38 @@ def _wait_for_indexing(client: PyMongoVoyageAI):
 def main():
     import os
     print("Hello from pymongo-voyageai!")
-
-    import pandas as pd
-    df = pd.read_parquet("hf://datasets/princeton-nlp/CharXiv/val.parquet")
-
-    datas = df["image"].head(3).tolist()
-    figures = [Image.open(BytesIO(d["bytes"])) for d in datas]
-    documents = [[figures[n]] for n in range(len(figures))]
     conn_str = "mongodb://127.0.0.1:27017?directConnection=true"
     client = PyMongoVoyageAI(voyageai_api_key=os.environ['VOYAGE_API_KEY'], mongo_connection_string=conn_str,
                          s3_bucket_name="pymongo-voyageai", collection_name="test", database_name="tests")
     client.delete_many({})
-    resp = client.add_documents(documents)
-    print(len(resp))
+
+    import pandas as pd
+    df = pd.read_parquet("hf://datasets/princeton-nlp/CharXiv/val.parquet")
+    datas = df["image"].head(3).tolist()
+    figures = [Image.open(BytesIO(d["bytes"])) for d in datas]
+    documents = [[figures[n]] for n in range(len(figures))]
+    resp = client.add_documents(*documents)
     _wait_for_indexing(client)
     query = "3D loss landscapes for different training strategies"
     data = client.similarity_search(query, extract_images=True)
-    print(data)
-    print(len(client.get_by_ids([d['_id'] for d in resp])))
+    # The best match should be the third input image.
+    assert data[0]['inputs'][0].image.tobytes() == figures[2].tobytes()
     client.delete_by_ids([d['_id'] for d in resp])
 
     query = "The consequences of a dictator's peace"
-    images = client.url_to_images("https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf")
-    client.add_documents([[img] for img in images])
-    print(len(resp))
+    resp = client.add_documents(URLDocument(url="https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"))
     _wait_for_indexing(client)
     data = client.similarity_search(query, extract_images=True)
-    print(data)
-    print(len(client.get_by_ids([d['_id'] for d in resp])))
+    # We expect page 5 to be the best match
+    assert data[0]['inputs'][0].page_number == 5
+    assert len(client.get_by_ids([d['_id'] for d in resp])) == len(resp)
     client.delete_by_ids([d['_id'] for d in resp])
-    client.close()
-
-    # TODO: add a url input that is a pdf
 
     # TODO: compare results to the ones in the notebook.
+    # https://colab.research.google.com/drive/12aFvstG8YFAWXyw-Bx5IXtaOqOzliGt9#scrollTo=brAeuCD3_xNv
 
+
+    # TODO: add a test that uses the other embed_type
 
 if __name__ == "__main__":
     main()
