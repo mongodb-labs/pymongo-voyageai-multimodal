@@ -501,7 +501,5 @@ def main():
     test_text_and_images(client)
     client.close()
 
-    # We should accept a storage class
-
 if __name__ == "__main__":
     main()
