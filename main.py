@@ -188,7 +188,7 @@ class PyMongoVoyageAI:
 
     def add_documents(
         self,
-        inputs: list[list[str | Image.Image | Document]],
+        inputs: list[str | Image.Image | Document | list[str | Image.Image | Document]],
         ids: list[str] | None = None,
         batch_size: int = DEFAULT_INSERT_BATCH_SIZE,
         **kwargs: Any,
@@ -219,8 +219,6 @@ class PyMongoVoyageAI:
                     doc = TextDocument(text=doc)
                 elif isinstance(doc, Image.Image):
                     doc = ImageDocument(image=doc)
-                    processed_inner.append(TextDocument(text=doc))
-                    model_inner.append(doc)
                 if isinstance(doc, ImageDocument):
                     processed_inner.append(self.image_to_s3(doc))
                     model_inner.append(doc.image)
@@ -424,14 +422,13 @@ def _wait_for_indexing(client: PyMongoVoyageAI):
 
 def test_image_set(client: PyMongoVoyageAI):
     url = "hf://datasets/princeton-nlp/CharXiv/val.parquet"
-    figures = client.url_to_images(url, image_field="image", end=3)
-    documents = [[figures[n]] for n in range(len(figures))]
+    documents = client.url_to_images(url, image_field="image", end=3)
     resp = client.add_documents(documents)
     _wait_for_indexing(client)
     query = "3D loss landscapes for different training strategies"
     data = client.similarity_search(query, extract_images=True)
     # The best match should be the third input image.
-    assert data[0]['inputs'][0].image.tobytes() == figures[2].image.tobytes()
+    assert data[0]['inputs'][0].image.tobytes() == documents[2].image.tobytes()
     client.delete_by_ids([d['_id'] for d in resp])
 
 
@@ -458,7 +455,7 @@ def test_pdf_pages(client: PyMongoVoyageAI):
     query = "The consequences of a dictator's peace"
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
     images = client.url_to_images(url)
-    resp = client.add_documents([[images[i]] for i in range(len(images))])
+    resp = client.add_documents(images)
     _wait_for_indexing(client)
     data = client.similarity_search(query, extract_images=True)
     # We expect page 5 to be the best match.
