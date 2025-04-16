@@ -102,7 +102,9 @@ class PyMongoVoyageAI:
         image_column: str | None = None,
         **kwargs: Any,
     ) -> list[ImageDocument]:
-        return url_to_images(url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs)
+        return url_to_images(
+            url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs
+        )
 
     def add_documents(
         self,
