@@ -1,7 +1,9 @@
 import io
 import urllib.request
+from typing import Any
 
 from PIL import Image
+from .document import ImageDocument
 
 try:
     import fitz  # type:ignore[import-untyped]
@@ -48,4 +50,57 @@ def pdf_url_to_images(
     # Close the document
     pdf.close()
 
+    return images
+
+
+def url_to_images(
+    url: str,
+    metadata: dict[str, Any] | None = None,
+    start: int = 0,
+    end: int | None = None,
+    image_column: str | None = None,
+    **kwargs: Any,
+) -> list[ImageDocument]:
+    images = []
+    i = url.rfind("/") + 1
+    basename = url[i:]
+    i = basename.rfind(".")
+    name = basename[:i]
+    if url.endswith(".parquet"):
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ValueError("pymongo-voyageai requires pandas to read parquet files") from None
+        if image_column is None:
+            raise ValueError("Must supply and image field to read a parquet file")
+        column = pd.read_parquet(url, **kwargs)[image_column][start:end]
+        for idx, item in enumerate(column.tolist()):
+            image = Image.open(io.BytesIO(item["bytes"]))
+            images.append(
+                ImageDocument(
+                    image=image,
+                    name=name,
+                    source_url=url,
+                    page_number=idx + start,
+                    metadata=metadata,
+                )
+            )
+    elif url.endswith(".pdf"):
+        for idx, img in enumerate(pdf_url_to_images(url, start=start, end=end, **kwargs)):
+            images.append(
+                ImageDocument(
+                    image=img,
+                    name=name,
+                    source_url=url,
+                    page_number=idx + start,
+                    metadata=metadata,
+                )
+            )
+    else:
+        with urllib.request.urlopen(url) as response:
+            image_data = response.read()
+        image = Image.open(io.BytesIO(image_data))
+        if "transparency" in image.info and image.mode != "RGBA":
+            image = image.convert("RGBA")
+        images.append(ImageDocument(image=image, name=name, source_url=url, metadata=metadata))
     return images

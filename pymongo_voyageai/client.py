@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-import urllib.request
 from collections.abc import Mapping, Sequence
-from io import BytesIO
 from time import monotonic, sleep
 from typing import Any
 
@@ -18,7 +16,7 @@ from voyageai.client import Client
 
 from .document import Document, DocumentType, ImageDocument, StoredDocument, TextDocument
 from .storage import ImageStorage, S3Storage
-from .utils import DEFAULT_MODEL_NAME, INTERVAL, TIMEOUT, pdf_url_to_images
+from .utils import DEFAULT_MODEL_NAME, INTERVAL, TIMEOUT, url_to_images
 
 logger = logging.getLogger(__file__)
 
@@ -104,49 +102,7 @@ class PyMongoVoyageAI:
         image_column: str | None = None,
         **kwargs: Any,
     ) -> list[ImageDocument]:
-        images = []
-        i = url.rfind("/") + 1
-        basename = url[i:]
-        i = basename.rfind(".")
-        name = basename[:i]
-        if url.endswith(".parquet"):
-            try:
-                import pandas as pd
-            except ImportError:
-                raise ValueError("pymongo-voyageai requires pandas to read parquet files") from None
-            if image_column is None:
-                raise ValueError("Must supply and image field to read a parquet file")
-            column = pd.read_parquet(url, **kwargs)[image_column][start:end]
-            for idx, item in enumerate(column.tolist()):
-                image = Image.open(BytesIO(item["bytes"]))
-                images.append(
-                    ImageDocument(
-                        image=image,
-                        name=name,
-                        source_url=url,
-                        page_number=idx + start,
-                        metadata=metadata,
-                    )
-                )
-        elif url.endswith(".pdf"):
-            for idx, img in enumerate(pdf_url_to_images(url, start=start, end=end, **kwargs)):
-                images.append(
-                    ImageDocument(
-                        image=img,
-                        name=name,
-                        source_url=url,
-                        page_number=idx + start,
-                        metadata=metadata,
-                    )
-                )
-        else:
-            with urllib.request.urlopen(url) as response:
-                image_data = response.read()
-            image = Image.open(BytesIO(image_data))
-            if "transparency" in image.info and image.mode != "RGBA":
-                image = image.convert("RGBA")
-            images.append(ImageDocument(image=image, name=name, source_url=url, metadata=metadata))
-        return images
+        return url_to_images(url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs)
 
     def add_documents(
         self,
