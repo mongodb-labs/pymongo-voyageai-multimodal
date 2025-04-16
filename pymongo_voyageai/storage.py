@@ -8,26 +8,43 @@ from PIL import Image
 from .document import ImageDocument, StoredDocument
 
 
-class ImageStorage:
+class ObjectStorage:
+    """A class used store image documents."""
+
     root_location: str
+    """The root location to use in the object store."""
 
     def save_image(self, image: ImageDocument) -> StoredDocument:
+        """Save an image document to the object store."""
         raise NotImplementedError
 
     def load_image(self, document: StoredDocument) -> ImageDocument:
+        """Load an image document from the object store."""
         raise NotImplementedError
 
     def delete_image(self, document: StoredDocument) -> None:
+        """Remove an image document from the object store."""
+        raise NotImplementedError
+
+    def close(self) -> None:
+        """Close the object store."""
         raise NotImplementedError
 
 
-class S3Storage(ImageStorage):
+class S3Storage(ObjectStorage):
     def __init__(
         self,
         bucket_name: str,
         client: botocore.client.BaseClient | None = None,
         region_name: str | None = None,
     ):
+        """Create an S3 object store.
+
+        Args:
+            bucket_name: The s3 bucket name.
+            client: An instantiated boto3 s3 client.
+            region_name: The aws region name to use when creating a boto3 s3 client.
+        """
         self.client = client or boto3.client("s3", region_name=region_name)
         self.root_location = bucket_name
 
@@ -60,3 +77,6 @@ class S3Storage(ImageStorage):
 
     def delete_image(self, document: StoredDocument) -> None:
         self.client.delete_object(Bucket=document.root_location, Key=document.object_name)
+
+    def close(self) -> None:
+        self.client.close()

@@ -20,6 +20,17 @@ INTERVAL = 1
 def pdf_url_to_images(
     url: str, start: int | None = None, end: int | None = None, zoom: float = 1.0
 ) -> list[Image.Image]:
+    """Extract images from a pdf url.
+
+    Args:
+        url: The url to load the images from.
+        start: The start frame to use for the images.
+        end: The end frame to use for the images.
+        zoom: The zoom factor to apply to the images.
+
+    Returns:
+        A list of image objects.
+    """
     if fitz is None:
         raise ValueError("pymongo-voyageai requires PyMuPDF to read pdf files") from None
     # Ensure that the URL is valid
@@ -62,6 +73,18 @@ def url_to_images(
     image_column: str | None = None,
     **kwargs: Any,
 ) -> list[ImageDocument]:
+    """Extract images from a url.
+
+    Args:
+        url: The url to load the images from.
+        metadata: A set of metadata to associate with the images.
+        start: The start frame to use for the images.
+        end: The end frame to use for the images.
+        image_column: The name of the column used to store the image data, for parquet files.
+
+    Returns:
+        A list of image document objects.
+    """
     images = []
     i = url.rfind("/") + 1
     basename = url[i:]

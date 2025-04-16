@@ -43,16 +43,27 @@ class PyMongoVoyageAI:
     ):
         """
         Args:
-            collection: MongoDB collection to add the texts to
-            text_key: MongoDB field that will contain the text for each document
-            index_name: Existing Atlas Vector Search Index
-            embedding_key: Field that will contain the embedding for each document
-            vector_index_name: Name of the Atlas Vector Search index
-            relevance_score_fn: The similarity score used for the index
-                Currently supported: 'euclidean', 'cosine', and 'dotProduct'
+            collection_name: The name of the MongoDB collection to add the documents to.
+            database_name: The name of the MongoDB database to use.
+            s3_bucket_name: The name of the s3 bucket to use for storage.
+            mongo_client: An instantiated MongoClient to use.
+            mongo_connection_string: A MongoDB connection string that is used to create a
+                MongoClient.  It must be provided if `mongo_client` is not provided.
+            voyageai_client: An instantiated VoyageAI client to use.
+            voyageai_api_key: An api key to use when creating a a VoyageAI Client object.
+                It must be provided if `voyageai_client` is not provided.
+            voyagai_model_name: The model name to use for VoyageAI embededdings.
+            storage_object: The ImageStorage object to use.  It can be used to provide alternate an
+                alternate storage backend or an instantiated `S3Storage` object.
+            index_name: The Atlas vector search index name to use for the collection.
+            embedding_key: Field that will contain the embedding for each document.
+            relevance_score_fn: The similarity score used for the index.
+                Currently supported: 'euclidean', 'cosine', and 'dotProduct'.
+            dimensions: The dimensionality of the VoyageAI model.
             auto_create_index: Whether to automatically create the vector search index if needed.
-            auto_index_timeout: Timeout in seconds to wait for an auto-created index
+            auto_index_timeout: Timeout in seconds to wait for an auto-created index.
                to be ready.
+            kwargs: Additionally keyword args accepted for future use.
         """
         self._dimensions = dimensions  # the size of the VoyageAI model.
         self._vo = voyageai_client or Client(api_key=voyageai_api_key)
@@ -82,11 +93,27 @@ class PyMongoVoyageAI:
             )
 
     def image_to_storage(self, document: ImageDocument | Image.Image) -> StoredDocument:
+        """Convert an image to a stored document.
+
+        Args:
+            document: The input document or image object.
+
+        Returns:
+            The stored document object.
+        """
         if isinstance(document, Image.Image):
             document = ImageDocument(image=document)
         return self._storage.save_image(document)
 
     def storage_to_image(self, document: StoredDocument | str) -> ImageDocument:
+        """Convert a stored document to an image document.
+
+        Args:
+            document: The input document or object name.
+
+        Returns:
+            The image document object.
+        """
         if isinstance(document, str):
             document = StoredDocument(
                 root_location=self._storage.root_location, object_name=document
@@ -102,6 +129,18 @@ class PyMongoVoyageAI:
         image_column: str | None = None,
         **kwargs: Any,
     ) -> list[ImageDocument]:
+        """Extract images from a url.
+
+        Args:
+            url: The url to load the images from.
+            metadata: A set of metadata to associate with the images.
+            start: The start frame to use for the images.
+            end: The end frame to use for the images.
+            image_column: The name of the column used to store the image data, for parquet files.
+
+        Returns:
+            A list of image document objects.
+        """
         return url_to_images(
             url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs
         )
@@ -121,6 +160,7 @@ class PyMongoVoyageAI:
                 See note on ids in add_texts.
             batch_size: Number of documents to insert at a time.
                 Tuning this may help with performance and sidestep MongoDB limits.
+            kwargs: Additional keyword args for future expansion.
 
         Returns:
             A list documents with their associated input documents.
@@ -197,11 +237,11 @@ class PyMongoVoyageAI:
 
         Args:
             ids: List of ids to delete.
-            **kwargs: Other keyword arguments passed to Collection.delete_many()
+            delete_stored_objects: Whether to delete the associated stored objects.
+            **kwargs: Other keyword arguments passed to delete_many().
 
         Returns:
-            Optional[bool]: True if deletion is successful,
-            False otherwise, None if not implemented.
+            bool: True if deletion is successful, False otherwise.
         """
         oids = [ObjectId(str(i)) for i in ids]
         return self.delete_many(
@@ -211,6 +251,16 @@ class PyMongoVoyageAI:
     def delete_many(
         self, filter: Mapping[str, Any], delete_stored_objects: bool = True, **kwargs: Any
     ) -> bool:
+        """Delete documents using a filter.
+
+        Args:
+            ids: List of ids to delete.
+            delete_stored_objects: Whether to delete the associated stored objects.
+            **kwargs: Other keyword arguments passed to the collection's `delete_many` method.
+
+        Returns:
+            bool: True if deletion is successful, False otherwise.
+        """
         if delete_stored_objects:
             for obj in self._coll.find(filter):
                 self._expand_doc(obj, False)
@@ -220,22 +270,23 @@ class PyMongoVoyageAI:
         return self._coll.delete_many(filter=filter, **kwargs).acknowledged
 
     def close(self) -> None:
+        """Close the client, cleaning up resources."""
         self._coll.database.client.close()
-
-    def _expand_doc(self, obj: dict[str, Any], extract_images: bool = True) -> dict[str, Any]:
-        for idx, inp in enumerate(list(obj["inputs"])):
-            if inp["type"] == DocumentType.storage:
-                doc = StoredDocument.model_validate(inp)
-                if extract_images:
-                    doc = self.storage_to_image(doc)  # type:ignore[assignment]
-                obj["inputs"][idx] = doc
-            elif inp["type"] == DocumentType.text:
-                obj["inputs"][idx] = TextDocument.model_validate(inp)
-        return obj
+        self._storage.close()
 
     def get_by_ids(
         self, ids: Sequence[str | ObjectId], extract_images: bool = True
     ) -> list[dict[str, Any]]:
+        """Get a list of documents by id.
+
+        Args:
+            ids: List of ids to search for.
+            extract_images: Whether to extract the stored documents into image documents.
+
+        Returns:
+            A list of matching documents, where the `inputs` is a list of stored documents
+            or image documents.
+        """
         docs = []
         oids = [ObjectId(i) for i in ids]
         for doc in self._coll.aggregate([{"$match": {"_id": {"$in": oids}}}]):
@@ -244,6 +295,7 @@ class PyMongoVoyageAI:
         return docs
 
     def wait_for_indexing(self, timeout: int = TIMEOUT, interval: int = INTERVAL) -> None:
+        """Wait for the search index to update to account for newly added embeddings."""
         n_docs = self._coll.count_documents({})
         start = monotonic()
         while monotonic() - start <= timeout:
@@ -266,28 +318,26 @@ class PyMongoVoyageAI:
         extract_images: bool = False,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:  # noqa: E501
-        """Return MongoDB documents most similar to the given query.
-
-        Atlas Vector Search eliminates the need to run a separate
-        search system alongside your database.
+        """Return documents most similar to the given query.
 
          Args:
             query: Input text of semantic query
-            k: (Optional) number of documents to return. Defaults to 4.
+            k: The number of documents to return. Defaults to 4.
             pre_filter: List of MQL match expressions comparing an indexed field
             post_filter_pipeline: (Optional) Pipeline of MongoDB aggregation stages
                 to filter/process results after $vectorSearch.
             oversampling_factor: Multiple of k used when generating number of candidates
-                at each step in the HNSW Vector Search,
+                at each step in the HNSW Vector Search.
             include_scores: If True, the query score of each result
                 will be included in metadata.
             include_embeddings: If True, the embedding vector of each result
                 will be included in metadata.
-            extract_images: If True, image data will be retrieved from
+            extract_images: If True, the stored documents will be converted image documents.
             kwargs: Additional arguments are specific to the search_type
 
         Returns:
-            List of documents most similar to the query and their scores.
+            List of documents most similar to the query and their scores, where the `inputs`
+            is a list of stored documents or image documents.
         """
         query_vector = self._vo.multimodal_embed(
             inputs=[[query]],
@@ -328,3 +378,14 @@ class PyMongoVoyageAI:
             self._expand_doc(res, extract_images)
             docs.append(res)
         return docs
+
+    def _expand_doc(self, obj: dict[str, Any], extract_images: bool = True) -> dict[str, Any]:
+        for idx, inp in enumerate(list(obj["inputs"])):
+            if inp["type"] == DocumentType.storage:
+                doc = StoredDocument.model_validate(inp)
+                if extract_images:
+                    doc = self.storage_to_image(doc)  # type:ignore[assignment]
+                obj["inputs"][idx] = doc
+            elif inp["type"] == DocumentType.text:
+                obj["inputs"][idx] = TextDocument.model_validate(inp)
+        return obj
