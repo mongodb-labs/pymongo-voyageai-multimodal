@@ -8,7 +8,7 @@ from bson import ObjectId
 from pymongo_voyageai import ImageDocument, PyMongoVoyageAI, StoredDocument
 from pymongo_voyageai.storage import ImageStorage, S3Storage
 
-if "VOYAGE_API_KEY" not in os.environ:
+if "VOYAGEAI_API_KEY" not in os.environ:
     pytest.skip("Requires VoyageAI API Key.", allow_module_level=True)
 
 
@@ -44,11 +44,11 @@ def client() -> Generator[PyMongoVoyageAI, None, None]:
     else:
         storage_object = MemoryStorage()  # type:ignore[assignment]
     client = PyMongoVoyageAI(
-        voyageai_api_key=os.environ["VOYAGE_API_KEY"],
+        voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
         mongo_connection_string=conn_str,
         storage_object=storage_object,
         collection_name="test",
-        database_name="pymongo-voyageai-test",
+        database_name="pymongo_voyageai_test_db",
     )
     client.delete_many({})
     yield client
