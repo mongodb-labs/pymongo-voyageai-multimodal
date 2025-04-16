@@ -729,8 +729,8 @@ wheels = [
 
 [[package]]
 name = "langchain-mongodb"
-version = "0.6.0"
-source = { git = "https://github.com/blink1073/langchain-mongodb?subdirectory=libs%2Flangchain-mongodb&branch=INTPYTHON-587#8be100595a0c80f251a51108c43a4be22e5d96e4" }
+version = "0.6.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain" },
     { name = "langchain-core" },
@@ -738,6 +738,10 @@ dependencies = [
     { name = "lark" },
     { name = "numpy" },
     { name = "pymongo" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3a/c4/318361b0e22e89e21596cca05eb999edc1b4c002212b69c89cd172887400/langchain_mongodb-0.6.1.tar.gz", hash = "sha256:8f6432a43335390508606b6985c75b2b853a6e50f205020ffca36b94a67b737a", size = 226865 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/c0/265300ae9894dc7901659caf6cb671d3e79db9ac04445b7658dcb0ce9316/langchain_mongodb-0.6.1-py3-none-any.whl", hash = "sha256:97f1789678aaffbf8faf5d7beeab16cd6e8aa711e391dd0eb6153c477af95f5c", size = 59122 },
 ]
 
 [[package]]
@@ -1626,7 +1630,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.37.25" },
-    { name = "langchain-mongodb", git = "https://github.com/blink1073/langchain-mongodb?subdirectory=libs%2Flangchain-mongodb&branch=INTPYTHON-587" },
+    { name = "langchain-mongodb", specifier = ">=0.6.0" },
     { name = "pymongo", specifier = ">=4.12.0" },
     { name = "voyageai", specifier = ">=0.3.0" },
 ]
