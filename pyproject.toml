@@ -97,3 +97,6 @@ unfixable = [
   "T20",  # Removes print statements
   "F401",  # Unused imports
 ]
+
+[tool.uv.sources]
+langchain-mongodb = { git = "https://github.com/blink1073/langchain-mongodb", subdirectory = "libs/langchain-mongodb", branch= "INTPYTHON-587" }
