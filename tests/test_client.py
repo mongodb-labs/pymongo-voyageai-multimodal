@@ -48,7 +48,7 @@ def client() -> Generator[PyMongoVoyageAI, None, None]:
         mongo_connection_string=conn_str,
         storage_object=storage_object,
         collection_name="test",
-        database_name="tests",
+        database_name="pymongo-voyageai-test",
     )
     client.delete_many({})
     yield client
