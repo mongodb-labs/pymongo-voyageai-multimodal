@@ -32,7 +32,13 @@ from pymongo_voyageai._version import __version__
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named "sphinx.ext.*") or your custom ones.
-extensions = ["sphinx.ext.intersphinx", "sphinx.ext.autodoc", "sphinx.ext.doctest"]
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autodoc.typehints",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinxcontrib.autodoc_pydantic",
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -242,5 +248,6 @@ htmlhelp_basename = "PyMongo-VoyageAIdoc"
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     "python": ("https://docs.python.org/", None),
+    "PIL": ("https://pillow.readthedocs.io/en/stable", None),
     "pymongo": ("https://pymongo.readthedocs.io/en/stable/", None),
 }

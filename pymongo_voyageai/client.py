@@ -15,7 +15,7 @@ from pymongo import MongoClient, ReplaceOne
 from voyageai.client import Client
 
 from .document import Document, DocumentType, ImageDocument, StoredDocument, TextDocument
-from .storage import ImageStorage, S3Storage
+from .storage import ObjectStorage, S3Storage
 from .utils import DEFAULT_MODEL_NAME, INTERVAL, TIMEOUT, url_to_images
 
 logger = logging.getLogger(__file__)
@@ -32,7 +32,7 @@ class PyMongoVoyageAI:
         voyageai_client: Client | None = None,
         voyageai_api_key: str | None = None,
         voyagai_model_name: str = DEFAULT_MODEL_NAME,
-        storage_object: ImageStorage | None = None,
+        storage_object: ObjectStorage | None = None,
         index_name: str = "vector_index",
         embedding_key: str = "embedding",
         relevance_score_fn: str = "cosine",
@@ -53,7 +53,7 @@ class PyMongoVoyageAI:
             voyageai_api_key: An api key to use when creating a a VoyageAI Client object.
                 It must be provided if `voyageai_client` is not provided.
             voyagai_model_name: The model name to use for VoyageAI embededdings.
-            storage_object: The ImageStorage object to use.  It can be used to provide alternate an
+            storage_object: The ObjectStorage object to use.  It can be used to provide alternate an
                 alternate storage backend or an instantiated `S3Storage` object.
             index_name: The Atlas vector search index name to use for the collection.
             embedding_key: Field that will contain the embedding for each document.
@@ -320,10 +320,10 @@ class PyMongoVoyageAI:
     ) -> list[dict[str, Any]]:  # noqa: E501
         """Return documents most similar to the given query.
 
-         Args:
-            query: Input text of semantic query
+        Args:
+            query: Input text of semantic query.
             k: The number of documents to return. Defaults to 4.
-            pre_filter: List of MQL match expressions comparing an indexed field
+            pre_filter: List of MQL match expressions comparing an indexed field.
             post_filter_pipeline: (Optional) Pipeline of MongoDB aggregation stages
                 to filter/process results after $vectorSearch.
             oversampling_factor: Multiple of k used when generating number of candidates

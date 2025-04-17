@@ -32,6 +32,8 @@ class ObjectStorage:
 
 
 class S3Storage(ObjectStorage):
+    """An object store using an S3 bucket."""
+
     def __init__(
         self,
         bucket_name: str,
