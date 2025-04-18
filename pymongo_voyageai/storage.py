@@ -82,3 +82,31 @@ class S3Storage(ObjectStorage):
 
     def close(self) -> None:
         self.client.close()
+
+
+class MemoryStorage(ObjectStorage):
+    """An in-memory object store"""
+
+    def __init__(self) -> None:
+        self.root_location = "foo"
+        self.storage: dict[str, ImageDocument] = dict()
+
+    def save_image(self, image: ImageDocument) -> StoredDocument:
+        object_name = str(ObjectId())
+        self.storage[object_name] = image
+        return StoredDocument(
+            root_location=self.root_location,
+            name=image.name,
+            object_name=object_name,
+            source_url=image.source_url,
+            page_number=image.page_number,
+        )
+
+    def load_image(self, document: StoredDocument) -> ImageDocument:
+        return self.storage[document.object_name]
+
+    def delete_image(self, document: StoredDocument) -> None:
+        self.storage.pop(document.object_name, None)
+
+    def close(self):
+        pass

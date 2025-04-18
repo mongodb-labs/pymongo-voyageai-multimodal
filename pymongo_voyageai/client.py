@@ -6,6 +6,7 @@ from time import monotonic, sleep
 from typing import Any
 
 from bson import ObjectId
+from langchain_core.runnables.config import run_in_executor
 from langchain_mongodb.index import create_vector_search_index
 from langchain_mongodb.pipelines import vector_search_stage
 from langchain_mongodb.utils import make_serializable
@@ -105,6 +106,17 @@ class PyMongoVoyageAI:
             document = ImageDocument(image=document)
         return self._storage.save_image(document)
 
+    async def aimage_to_storage(self, document: ImageDocument | Image.Image) -> StoredDocument:
+        """Convert an image to a stored document.
+
+        Args:
+            document: The input document or image object.
+
+        Returns:
+            The stored document object.
+        """
+        return await run_in_executor(None, self.image_to_storage, document)
+
     def storage_to_image(self, document: StoredDocument | str) -> ImageDocument:
         """Convert a stored document to an image document.
 
@@ -119,6 +131,17 @@ class PyMongoVoyageAI:
                 root_location=self._storage.root_location, object_name=document
             )
         return self._storage.load_image(document=document)
+
+    async def astorage_to_image(self, document: StoredDocument | str) -> ImageDocument:
+        """Convert a stored document to an image document.
+
+        Args:
+            document: The input document or object name.
+
+        Returns:
+            The image document object.
+        """
+        return await run_in_executor(None, self.storage_to_image, document)
 
     def url_to_images(
         self,
@@ -143,6 +166,38 @@ class PyMongoVoyageAI:
         """
         return url_to_images(
             url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs
+        )
+
+    async def aurl_to_images(
+        self,
+        url: str,
+        metadata: dict[str, Any] | None = None,
+        start: int = 0,
+        end: int | None = None,
+        image_column: str | None = None,
+        **kwargs: Any,
+    ) -> list[ImageDocument]:
+        """Extract images from a url.
+
+        Args:
+            url: The url to load the images from.
+            metadata: A set of metadata to associate with the images.
+            start: The start frame to use for the images.
+            end: The end frame to use for the images.
+            image_column: The name of the column used to store the image data, for parquet files.
+
+        Returns:
+            A list of image document objects.
+        """
+        return await run_in_executor(
+            None,
+            self.url_to_images,
+            url,
+            metadata=metadata,
+            start=start,
+            end=end,
+            image_column=image_column,
+            **kwargs,
         )
 
     def add_documents(
@@ -230,6 +285,30 @@ class PyMongoVoyageAI:
             self._coll.bulk_write(operations)
         return output_docs
 
+    async def aadd_documents(
+        self,
+        inputs: Sequence[str | Image.Image | Document | Sequence[str | Image.Image | Document]],
+        ids: list[str] | None = None,
+        batch_size: int = DEFAULT_INSERT_BATCH_SIZE,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Add multimodal documents to the vectorstore.
+
+        Args:
+            inputs: List of inputs to add to the vectorstore, which are each a list of documents.
+            ids: Optional list of unique ids that will be used as index in VectorStore.
+                See note on ids in add_texts.
+            batch_size: Number of documents to insert at a time.
+                Tuning this may help with performance and sidestep MongoDB limits.
+            kwargs: Additional keyword args for future expansion.
+
+        Returns:
+            A list documents with their associated input documents.
+        """
+        return await run_in_executor(
+            None, self.add_documents, inputs, ids=ids, batch_size=batch_size, **kwargs
+        )
+
     def delete_by_ids(
         self, ids: list[str | ObjectId], delete_stored_objects: bool = True, **kwargs: Any
     ) -> bool:
@@ -246,6 +325,23 @@ class PyMongoVoyageAI:
         oids = [ObjectId(str(i)) for i in ids]
         return self.delete_many(
             {"_id": {"$in": oids}}, delete_stored_objects=delete_stored_objects, **kwargs
+        )
+
+    async def adelete_by_ids(
+        self, ids: list[str | ObjectId], delete_stored_objects: bool = True, **kwargs: Any
+    ) -> bool:
+        """Delete documents by ids.
+
+        Args:
+            ids: List of ids to delete.
+            delete_stored_objects: Whether to delete the associated stored objects.
+            **kwargs: Other keyword arguments passed to delete_many().
+
+        Returns:
+            bool: True if deletion is successful, False otherwise.
+        """
+        return await run_in_executor(
+            None, self.delete_by_ids, ids, delete_stored_objects=delete_stored_objects, **kwargs
         )
 
     def delete_many(
@@ -269,10 +365,31 @@ class PyMongoVoyageAI:
                         self._storage.delete_image(inp)
         return self._coll.delete_many(filter=filter, **kwargs).acknowledged
 
+    async def adelete_many(
+        self, filter: Mapping[str, Any], delete_stored_objects: bool = True, **kwargs: Any
+    ) -> bool:
+        """Delete documents using a filter.
+
+        Args:
+            ids: List of ids to delete.
+            delete_stored_objects: Whether to delete the associated stored objects.
+            **kwargs: Other keyword arguments passed to the collection's `delete_many` method.
+
+        Returns:
+            bool: True if deletion is successful, False otherwise.
+        """
+        return await run_in_executor(
+            None, self.delete_many, filter, delete_stored_objects=delete_stored_objects, **kwargs
+        )
+
     def close(self) -> None:
         """Close the client, cleaning up resources."""
         self._coll.database.client.close()
         self._storage.close()
+
+    async def aclose(self) -> None:
+        """Close the client, cleaning up resources."""
+        return await run_in_executor(None, self.close)
 
     def get_by_ids(
         self, ids: Sequence[str | ObjectId], extract_images: bool = True
@@ -294,6 +411,21 @@ class PyMongoVoyageAI:
             docs.append(doc)
         return docs
 
+    async def aget_by_ids(
+        self, ids: Sequence[str | ObjectId], extract_images: bool = True
+    ) -> list[dict[str, Any]]:
+        """Get a list of documents by id.
+
+        Args:
+            ids: List of ids to search for.
+            extract_images: Whether to extract the stored documents into image documents.
+
+        Returns:
+            A list of matching documents, where the `inputs` is a list of stored documents
+            or image documents.
+        """
+        return await run_in_executor(None, self.get_by_ids, ids, extract_images=extract_images)
+
     def wait_for_indexing(self, timeout: int = TIMEOUT, interval: int = INTERVAL) -> None:
         """Wait for the search index to update to account for newly added embeddings."""
         n_docs = self._coll.count_documents({})
@@ -305,6 +437,12 @@ class PyMongoVoyageAI:
                 sleep(interval)
 
         raise TimeoutError(f"Failed to embed, insert, and index texts in {timeout}s.")
+
+    async def await_for_indexing(self, timeout: int = TIMEOUT, interval: int = INTERVAL) -> None:
+        """Wait for the search index to update to account for newly added embeddings."""
+        return await run_in_executor(
+            None, self.wait_for_indexing, timeout=timeout, interval=interval
+        )
 
     def similarity_search(
         self,
@@ -378,6 +516,53 @@ class PyMongoVoyageAI:
             self._expand_doc(res, extract_images)
             docs.append(res)
         return docs
+
+    async def asimilarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        pre_filter: dict[str, Any] | None = None,
+        post_filter_pipeline: list[dict[str, Any]] | None = None,
+        oversampling_factor: int = 10,
+        include_scores: bool = False,
+        include_embeddings: bool = False,
+        extract_images: bool = False,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:  # noqa: E501
+        """Return documents most similar to the given query.
+
+        Args:
+            query: Input text of semantic query.
+            k: The number of documents to return. Defaults to 4.
+            pre_filter: List of MQL match expressions comparing an indexed field.
+            post_filter_pipeline: (Optional) Pipeline of MongoDB aggregation stages
+                to filter/process results after $vectorSearch.
+            oversampling_factor: Multiple of k used when generating number of candidates
+                at each step in the HNSW Vector Search.
+            include_scores: If True, the query score of each result
+                will be included in metadata.
+            include_embeddings: If True, the embedding vector of each result
+                will be included in metadata.
+            extract_images: If True, the stored documents will be converted image documents.
+            kwargs: Additional arguments are specific to the search_type
+
+        Returns:
+            List of documents most similar to the query and their scores, where the `inputs`
+            is a list of stored documents or image documents.
+        """
+        return await run_in_executor(
+            None,
+            self.similarity_search,
+            query,
+            k=k,
+            pre_filter=pre_filter,
+            post_filter_pipeline=post_filter_pipeline,
+            oversampling_factor=oversampling_factor,
+            include_scores=include_scores,
+            include_embeddings=include_embeddings,
+            extract_images=extract_images,
+            **kwargs,
+        )
 
     def _expand_doc(self, obj: dict[str, Any], extract_images: bool = True) -> dict[str, Any]:
         for idx, inp in enumerate(list(obj["inputs"])):

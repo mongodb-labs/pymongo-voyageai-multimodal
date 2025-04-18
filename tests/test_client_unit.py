@@ -1,52 +1,40 @@
 import os
 from collections.abc import Generator
+from typing import Any
 
-import numpy as np
 import pytest
-from bson import ObjectId
 
-from pymongo_voyageai import ImageDocument, PyMongoVoyageAI, StoredDocument
-from pymongo_voyageai.storage import ImageStorage, S3Storage
-
-if "VOYAGEAI_API_KEY" not in os.environ:
-    pytest.skip("Requires VoyageAI API Key.", allow_module_level=True)
-
+from pymongo_voyageai import MemoryStorage, PyMongoVoyageAI
 
 # mypy: disable_error_code="no-untyped-def"
-class MemoryStorage(ImageStorage):
-    def __init__(self) -> None:
-        self.root_location = "foo"
-        self.storage: dict[str, ImageDocument] = dict()
 
-    def save_image(self, image: ImageDocument) -> StoredDocument:
-        object_name = str(ObjectId())
-        self.storage[object_name] = image
-        return StoredDocument(
-            root_location=self.root_location,
-            name=image.name,
-            object_name=object_name,
-            source_url=image.source_url,
-            page_number=image.page_number,
-        )
 
-    def load_image(self, document: StoredDocument) -> ImageDocument:
-        return self.storage[document.object_name]
+class MockVoyageAIResponse:
+    def __init__(self, n):
+        self.n = n
 
-    def delete_image(self, document: StoredDocument) -> None:
-        del self.storage[document.object_name]
+    @property
+    def embeddings(self) -> list[float]:
+        return [[0.1] * 1024 for i in range(self.n)]
+
+
+class MockVoyageAI:
+    def multimodal_embed(
+        self,
+        inputs: list[Any],
+        model: str,
+        input_type: str,
+    ):
+        return MockVoyageAIResponse(len(inputs))
 
 
 @pytest.fixture
 def client() -> Generator[PyMongoVoyageAI, None, None]:
     conn_str = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017?directConnection=true")
-    if "S3_BUCKET" in os.environ:
-        storage_object = S3Storage(os.environ["S3_BUCKET"])
-    else:
-        storage_object = MemoryStorage()  # type:ignore[assignment]
     client = PyMongoVoyageAI(
-        voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
+        voyageai_client=MockVoyageAI(),
+        storage_object=MemoryStorage(),
         mongo_connection_string=conn_str,
-        storage_object=storage_object,
         collection_name="test",
         database_name="pymongo_voyageai_test_db",
     )
@@ -62,8 +50,7 @@ def test_image_set(client: PyMongoVoyageAI):
     client.wait_for_indexing()
     query = "3D loss landscapes for different training strategies"
     data = client.similarity_search(query, extract_images=True)
-    # The best match should be the third input image.
-    assert data[0]["inputs"][0].image.tobytes() == documents[2].image.tobytes()
+    assert len(data[0]["inputs"][0].image.tobytes()) > 0
     client.delete_by_ids([d["_id"] for d in resp])
 
 
@@ -80,10 +67,7 @@ def test_text_and_images(client: PyMongoVoyageAI):
         ]
     )
     client.wait_for_indexing()
-    # The interleaved inputs should have different but similar embeddings.
-    embeddings = [d["embedding"] for d in resp]
-    assert embeddings[2] != embeddings[3]
-    assert np.dot(embeddings[2], embeddings[3]) > 0.95
+    assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
     client.delete_by_ids([d["_id"] for d in resp])
 
 
@@ -94,7 +78,22 @@ def test_pdf_pages(client: PyMongoVoyageAI):
     resp = client.add_documents(images)
     client.wait_for_indexing()
     data = client.similarity_search(query, extract_images=True)
-    # We expect page 5 to be the best match.
-    assert data[0]["inputs"][0].page_number == 5
+    assert len(data[0]["inputs"][0].image.tobytes()) > 0
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
     client.delete_by_ids([d["_id"] for d in resp])
+
+
+@pytest.mark.asyncio
+async def test_image_set_async(client: PyMongoVoyageAI):
+    url = "hf://datasets/princeton-nlp/CharXiv/val.parquet"
+    documents = await client.aurl_to_images(url, image_column="image", end=3)
+    resp = await client.aadd_documents(documents)
+    await client.await_for_indexing()
+    query = "3D loss landscapes for different training strategies"
+    data = await client.asimilarity_search(query, extract_images=True)
+    assert len(data[0]["inputs"][0].image.tobytes()) > 0
+    ids = await client.aget_by_ids([d["_id"] for d in resp])
+    assert len(ids) == len(resp)
+    await client.adelete_by_ids([d["_id"] for d in resp])
+    await client.adelete_many({})
+    await client.aclose()
