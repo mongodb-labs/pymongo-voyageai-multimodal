@@ -47,7 +47,7 @@ Then, perform the multi-modal embedding:
 
 
 .. toctree::
- :maxdepth: 2
+ :maxdepth: 3
 
  api
  examples
