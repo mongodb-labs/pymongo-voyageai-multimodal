@@ -4,10 +4,11 @@ Examples
 Querying Against PDF Pages
 --------------------------
 
-.. code-block::python
+.. code-block:: python
 
     import os
     from pymongo_voyageai import PyMongoVoyageAI
+
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
         s3_bucket_name=os.environ["S3_BUCKET_NAME"],
@@ -33,10 +34,11 @@ Querying Against PDF Pages
 Querying Against Parquet Data
 -----------------------------
 
-.. code-block::python
+.. code-block:: python
 
     import os
     from pymongo_voyageai import PyMongoVoyageAI
+
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
         s3_bucket_name=os.environ["S3_BUCKET_NAME"],
@@ -61,10 +63,11 @@ Querying Against Parquet Data
 Combining Text and Images
 -------------------------
 
-.. code-block::python
+.. code-block:: python
 
     import os
     from pymongo_voyageai import PyMongoVoyageAI
+
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
         s3_bucket_name=os.environ["S3_BUCKET_NAME"],
@@ -97,10 +100,11 @@ Combining Text and Images
 Using Async API
 ---------------
 
-.. code-block::python
+.. code-block:: python
 
     import os
     from pymongo_voyageai import PyMongoVoyageAI
+
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
         s3_bucket_name=os.environ["S3_BUCKET_NAME"],
