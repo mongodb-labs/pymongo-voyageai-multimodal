@@ -23,6 +23,108 @@ logger = logging.getLogger(__file__)
 
 
 class PyMongoVoyageAI:
+    """MongoDB and VoyageAI integration for multimodal embeddings.
+
+    PyMongoVoyageAI performs data operations on
+    text, images, embeddings and arbitrary data.
+    The PyMongoVoyageAI provides Vector Search
+    based on similarity of embedding vectors following the
+    Hierarchical Navigable Small Worlds (HNSW) algorithm.
+
+       Setup:
+        * Set up a MongoDB Atlas cluster. The free tier M0 will allow you to start.
+          Search Indexes are only available on Atlas, the fully managed cloud service,
+          not the self-managed MongoDB.
+          Follow [this guide](https://www.mongodb.com/basics/mongodb-atlas-tutorial)
+
+        * Create a Collection and a Vector Search Index.  The procedure is described
+          [here](https://www.mongodb.com/docs/atlas/atlas-vector-search/create-index/#procedure).
+          You can optionally supply a `dimensions` argument to programmatically create a Vector
+          Search Index.
+
+        * Set up your VoyageAI account on dash.voyageai.com.  You can either provide the
+          `voyageai_api_key` to the constructor or create a VoyageAI `Client` yourself and pass
+          it as `voyageai_client`.
+
+        * Set up an S3 bucket for storage.  Either provide the `s3_bucket_name` to use the default
+          AWS credentials or provide an instantiated S3 client to an `S3Storage` object and provide
+          that object as `storage_object`.  For local testing, you could instead pass a
+          `MemoryStorage` object.
+
+    Instantiate:
+        .. code-block:: python
+
+            import os
+            from pymongo import MongoClient
+            from pymongo_voyageia import PyMongoVoyageAI
+
+            client = PyMongoVoyageAI.from_connection_string(
+                connection_string=os.environ["MONGODB_ATLAS_CONNECTION_STRING"],
+                database_name="db_name",
+                collection_name="collection_name",
+                s3_bucket_name=os.environ["S3_BUCKET_NAME"],
+                voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
+            )
+
+    Add Documents:
+        .. code-block:: python
+
+            from pymongo_voyageai import TextDocument, ImageDocument
+
+            text = TextDocument(text="foo", metadata={"baz": "bar"})
+            images = client.url_to_images(
+                "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
+            )
+            documents = [text1, images[0], images[1]]
+            ids = ["1", "2", "3"]
+            client.add_documents(documents=documents, ids=ids)
+
+    Delete Documents:
+        .. code-block:: python
+
+            client.delete(ids=["3"])
+
+    Search:
+        .. code-block:: python
+
+            results = client.similarity_search(query="thud", k=1)
+            for doc in results:
+                print(f"* {doc['id']} [{doc['inputs']}]")
+
+
+    Search with filter:
+        .. code-block:: python
+
+            results = client.similarity_search(query="thud", k=1, post_filter=[{"bar": "baz"}])
+            for doc in results:
+                print(f"* {doc['id']} [{doc['inputs']}]")
+
+    Search with score:
+        .. code-block:: python
+
+            results = client.similarity_search(query="qux", k=1, include_scores=True)
+
+            for doc in results:
+                print(f"* [SIM={doc['score']:3f}] {doc['id']} [{doc['inputs']}]")
+
+    Async:
+        .. code-block:: python
+
+            # add documents
+            # await client.aadd_documents(documents=documents, ids=ids)
+
+            # delete documents
+            # await client.adelete(ids=["3"])
+
+            # search
+            # results = client.asimilarity_search(query="thud",k=1)
+
+            # search with score
+            results = await client.asimilarity_search(query="qux", k=1, include_scores=True)
+            for doc in results:
+                print(f"* [SIM={doc['score']:3f}] {doc['id']} [{doc['inputs']}]")
+    """
+
     def __init__(
         self,
         collection_name: str,

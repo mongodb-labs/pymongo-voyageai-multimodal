@@ -46,30 +46,8 @@ Then, perform the multi-modal embedding:
     client.close()
 
 
-API
-===
+.. toctree::
+ :maxdepth: 2
 
-Classes
--------
-
-.. autoclass:: pymongo_voyageai.PyMongoVoyageAI
-   :members:
-
-   .. automethod:: __init__
-
-.. autoclass:: pymongo_voyageai.DocumentType
-
-.. autoclass:: pymongo_voyageai.Document
-
-.. autoclass:: pymongo_voyageai.ImageDocument
-
-.. autoclass:: pymongo_voyageai.TextDocument
-
-.. autoclass:: pymongo_voyageai.StoredDocument
-
-.. autoclass:: pymongo_voyageai.ObjectStorage
-   :members:
-
-.. autoclass:: pymongo_voyageai.S3Storage
-
-    .. automethod:: __init__
+ api
+ examples
