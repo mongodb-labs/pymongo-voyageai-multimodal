@@ -56,7 +56,7 @@ class PyMongoVoyageAI:
 
             import os
             from pymongo import MongoClient
-            from pymongo_voyageia import PyMongoVoyageAI
+            from pymongo_voyageai import PyMongoVoyageAI
 
             client = PyMongoVoyageAI.from_connection_string(
                 connection_string=os.environ["MONGODB_ATLAS_CONNECTION_STRING"],
