@@ -267,7 +267,13 @@ class PyMongoVoyageAI:
             A list of image document objects.
         """
         return url_to_images(
-            url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs
+            url,
+            storage=self._storage,
+            metadata=metadata,
+            start=start,
+            end=end,
+            image_column=image_column,
+            **kwargs,
         )
 
     async def aurl_to_images(

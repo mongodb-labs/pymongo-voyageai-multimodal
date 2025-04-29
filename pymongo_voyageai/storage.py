@@ -14,12 +14,19 @@ class ObjectStorage:
     root_location: str
     """The root location to use in the object store."""
 
+    url_prefixes: list[str] | None
+    """The url prefixes used by the object store, for reading data from a url."""
+
     def save_image(self, image: ImageDocument) -> StoredDocument:
         """Save an image document to the object store."""
         raise NotImplementedError
 
     def load_image(self, document: StoredDocument) -> ImageDocument:
         """Load an image document from the object store."""
+        raise NotImplementedError
+
+    def read_from_url(self, url: str) -> io.BytesIO:
+        """Read data from a url into a BytesIO object."""
         raise NotImplementedError
 
     def delete_image(self, document: StoredDocument) -> None:
@@ -33,6 +40,8 @@ class ObjectStorage:
 
 class S3Storage(ObjectStorage):
     """An object store using an S3 bucket."""
+
+    url_prefixes = ["s3://", "s3."]
 
     def __init__(
         self,
@@ -77,6 +86,12 @@ class S3Storage(ObjectStorage):
             name=document.name,
         )
 
+    def read_from_url(self, url: str) -> io.BytesIO:
+        bucket, key = url.split("/", 2)[-1].split("/", 1)
+        buffer = io.BytesIO()
+        self.client.download_fileobj(bucket, key, buffer)
+        return buffer
+
     def delete_image(self, document: StoredDocument) -> None:
         self.client.delete_object(Bucket=document.root_location, Key=document.object_name)
 
@@ -86,6 +101,8 @@ class S3Storage(ObjectStorage):
 
 class MemoryStorage(ObjectStorage):
     """An in-memory object store"""
+
+    url_prefixes = ["file://"]
 
     def __init__(self) -> None:
         self.root_location = "foo"
@@ -104,6 +121,11 @@ class MemoryStorage(ObjectStorage):
 
     def load_image(self, document: StoredDocument) -> ImageDocument:
         return self.storage[document.object_name]
+
+    def read_from_url(self, url: str) -> io.BytesIO:
+        with open(url.replace("file://", ""), "rb") as fid:
+            data = fid.read()
+        return io.BytesIO(data)
 
     def delete_image(self, document: StoredDocument) -> None:
         self.storage.pop(document.object_name, None)
