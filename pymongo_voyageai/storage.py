@@ -60,7 +60,7 @@ class S3Storage(ObjectStorage):
         self.root_location = bucket_name
 
     def save_image(self, image: ImageDocument) -> StoredDocument:
-        object_name = str(ObjectId())
+        object_name = f"{ObjectId()}.png"
         fd = io.BytesIO()
         image.image.save(fd, "png")
         fd.seek(0)
