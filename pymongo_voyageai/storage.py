@@ -41,7 +41,7 @@ class ObjectStorage:
 class S3Storage(ObjectStorage):
     """An object store using an S3 bucket."""
 
-    url_prefixes = ["s3://", "s3."]
+    url_prefixes = ["s3://"]
 
     def __init__(
         self,
