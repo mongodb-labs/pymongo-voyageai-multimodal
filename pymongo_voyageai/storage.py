@@ -87,7 +87,7 @@ class S3Storage(ObjectStorage):
         )
 
     def read_from_url(self, url: str) -> io.BytesIO:
-        bucket, key = url.split("/", 2)[-1].split("/", 1)
+        bucket, key = url.replace("s3://", "").split("/")
         buffer = io.BytesIO()
         self.client.download_fileobj(bucket, key, buffer)
         return buffer
