@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import logging
 from collections.abc import Mapping, Sequence
 from time import monotonic, sleep
@@ -206,7 +207,19 @@ class PyMongoVoyageAI:
         """
         if isinstance(document, Image.Image):
             document = ImageDocument(image=document)
-        return self._storage.save_image(document)
+        object_name = f"{ObjectId()}.png"
+        fd = io.BytesIO()
+        document.image.save(fd, "png")
+        fd.seek(0)
+        self._storage.save_data(fd, object_name)
+        return StoredDocument(
+            root_location=self._storage.root_location,
+            object_name=object_name,
+            page_number=document.page_number,
+            source_url=document.source_url,
+            name=document.name,
+            metadata=document.metadata,
+        )
 
     async def aimage_to_storage(self, document: ImageDocument | Image.Image) -> StoredDocument:
         """Convert an image to a stored document.
@@ -232,7 +245,15 @@ class PyMongoVoyageAI:
             document = StoredDocument(
                 root_location=self._storage.root_location, object_name=document
             )
-        return self._storage.load_image(document=document)
+        buffer = self._storage.read_data(document.object_name)
+        image = Image.open(buffer)
+        return ImageDocument(
+            image=image,
+            source_url=document.source_url,
+            page_number=document.page_number,
+            metadata=document.metadata,
+            name=document.name,
+        )
 
     async def astorage_to_image(self, document: StoredDocument | str) -> ImageDocument:
         """Convert a stored document to an image document.
@@ -267,7 +288,13 @@ class PyMongoVoyageAI:
             A list of image document objects.
         """
         return url_to_images(
-            url, metadata=metadata, start=start, end=end, image_column=image_column, **kwargs
+            url,
+            storage=self._storage,
+            metadata=metadata,
+            start=start,
+            end=end,
+            image_column=image_column,
+            **kwargs,
         )
 
     async def aurl_to_images(
@@ -464,7 +491,7 @@ class PyMongoVoyageAI:
                 self._expand_doc(obj, False)
                 for inp in obj["inputs"]:
                     if isinstance(inp, StoredDocument):
-                        self._storage.delete_image(inp)
+                        self._storage.delete_data(inp.object_name)
         return self._coll.delete_many(filter=filter, **kwargs).acknowledged
 
     async def adelete_many(

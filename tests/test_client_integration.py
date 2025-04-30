@@ -1,16 +1,18 @@
 import os
+import urllib.request
 from collections.abc import Generator
 
 import numpy as np
 import pytest
+from bson import ObjectId
 
-from pymongo_voyageai import PyMongoVoyageAI
+from pymongo_voyageai import MemoryStorage, PyMongoVoyageAI
 
 if "VOYAGEAI_API_KEY" not in os.environ:
     pytest.skip("Requires VoyageAI API Key.", allow_module_level=True)
 
 if "S3_BUCKET_NAME" not in os.environ:
-    pytest.skip("Requires VoyageAI API Key.", allow_module_level=True)
+    pytest.skip("Requires S3 Bucket name.", allow_module_level=True)
 
 # mypy: disable_error_code="no-untyped-def"
 
@@ -73,6 +75,43 @@ def test_pdf_pages(client: PyMongoVoyageAI):
     assert data[0]["inputs"][0].page_number == 5
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
     client.delete_by_ids([d["_id"] for d in resp])
+
+
+def test_pdf_pages_storage(client: PyMongoVoyageAI):
+    query = "The consequences of a dictator's peace"
+    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
+    storage = client._storage
+    object_name = f"{ObjectId()}.pdf"
+    with urllib.request.urlopen(url) as response:
+        storage.client.upload_fileobj(response, storage.root_location, object_name)
+    url = f"s3://{storage.root_location}/{object_name}"
+    images = client.url_to_images(url)
+    resp = client.add_documents(images)
+    client.wait_for_indexing()
+    data = client.similarity_search(query, extract_images=True)
+    assert len(data[0]["inputs"][0].image.tobytes()) > 0
+    assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
+    client.delete_by_ids([d["_id"] for d in resp])
+    storage.client.delete_object(Bucket=storage.root_location, Key=object_name)
+
+
+def test_pdf_pages_custom_storage(client: PyMongoVoyageAI):
+    query = "The consequences of a dictator's peace"
+    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
+    storage = client._storage
+    object_name = f"{ObjectId()}.pdf"
+    with urllib.request.urlopen(url) as response:
+        storage.client.upload_fileobj(response, storage.root_location, object_name)
+    url = f"s3://{storage.root_location}/{object_name}"
+    client._storage = MemoryStorage()
+    images = client.url_to_images(url)
+    resp = client.add_documents(images)
+    client.wait_for_indexing()
+    data = client.similarity_search(query, extract_images=True)
+    assert len(data[0]["inputs"][0].image.tobytes()) > 0
+    assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
+    client.delete_by_ids([d["_id"] for d in resp])
+    storage.client.delete_object(Bucket=storage.root_location, Key=object_name)
 
 
 @pytest.mark.asyncio

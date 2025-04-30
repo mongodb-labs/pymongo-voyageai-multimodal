@@ -97,6 +97,38 @@ Combining Text and Images
     client.close()
 
 
+Loading Data from S3
+--------------------
+
+If you already have data stored in S3, you can use an ``s3://`` url to load the image(s):
+
+.. code-block:: python
+
+    import os
+    from pymongo_voyageai import PyMongoVoyageAI
+
+    client = PyMongoVoyageAI(
+        voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
+        s3_bucket_name=os.environ["S3_BUCKET_NAME"],
+        mongo_connection_string=os.environ["MONGODB_URI"],
+        collection_name="test",
+        database_name="test_db",
+    )
+
+    query = "The consequences of a dictator's peace"
+    url = "s3://my-bucket-name/readingcopy.pdf"
+    images = client.url_to_images(url)
+    resp = client.add_documents(images)
+    client.wait_for_indexing()
+    data = client.similarity_search(query, extract_images=True)
+
+    # We expect page 5 to be the best match.
+    assert data[0]["inputs"][0].page_number == 5
+    assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
+    client.delete_by_ids([d["_id"] for d in resp])
+    client.close()
+
+
 Using Async API
 ---------------
 

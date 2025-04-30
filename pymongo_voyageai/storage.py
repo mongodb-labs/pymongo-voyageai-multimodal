@@ -2,37 +2,42 @@ import io
 
 import boto3  # type:ignore[import-untyped]
 import botocore  # type:ignore[import-untyped]
-from bson import ObjectId
-from PIL import Image
-
-from .document import ImageDocument, StoredDocument
 
 
 class ObjectStorage:
-    """A class used store image documents."""
+    """A class used to store binary data."""
 
     root_location: str
-    """The root location to use in the object store."""
+    """The default root location to use in the object store."""
 
-    def save_image(self, image: ImageDocument) -> StoredDocument:
-        """Save an image document to the object store."""
+    url_prefixes: list[str] | None
+    """The url prefixes used by the object store, for reading data from a url."""
+
+    def save_data(self, data: io.BytesIO, object_name: str) -> None:
+        """Save data to the object store."""
         raise NotImplementedError
 
-    def load_image(self, document: StoredDocument) -> ImageDocument:
-        """Load an image document from the object store."""
+    def read_data(self, object_name: str) -> io.BytesIO:
+        """Read data from the object store."""
         raise NotImplementedError
 
-    def delete_image(self, document: StoredDocument) -> None:
-        """Remove an image document from the object store."""
+    def load_url(self, url: str) -> io.BytesIO:
+        """Load data from a url."""
         raise NotImplementedError
 
-    def close(self) -> None:
+    def delete_data(self, object_name: str) -> None:
+        """Delete data from the object store."""
+        raise NotImplementedError
+
+    def close(self):
         """Close the object store."""
-        raise NotImplementedError
+        pass
 
 
 class S3Storage(ObjectStorage):
     """An object store using an S3 bucket."""
+
+    url_prefixes = ["s3://"]
 
     def __init__(
         self,
@@ -50,35 +55,26 @@ class S3Storage(ObjectStorage):
         self.client = client or boto3.client("s3", region_name=region_name)
         self.root_location = bucket_name
 
-    def save_image(self, image: ImageDocument) -> StoredDocument:
-        object_name = str(ObjectId())
-        fd = io.BytesIO()
-        image.image.save(fd, "png")
-        fd.seek(0)
-        self.client.upload_fileobj(fd, self.root_location, object_name)
-        return StoredDocument(
-            root_location=self.root_location,
-            object_name=object_name,
-            page_number=image.page_number,
-            source_url=image.source_url,
-            name=image.name,
-            metadata=image.metadata,
-        )
+    def save_data(self, data: io.BytesIO, object_name: str) -> None:
+        """Save data to the object store."""
+        self.client.upload_fileobj(data, self.root_location, object_name)
 
-    def load_image(self, document: StoredDocument) -> ImageDocument:
+    def read_data(self, object_name: str) -> io.BytesIO:
+        """Read data using the object store."""
         buffer = io.BytesIO()
-        self.client.download_fileobj(document.root_location, document.object_name, buffer)
-        image = Image.open(buffer)
-        return ImageDocument(
-            image=image,
-            source_url=document.source_url,
-            page_number=document.page_number,
-            metadata=document.metadata,
-            name=document.name,
-        )
+        self.client.download_fileobj(self.root_location, object_name, buffer)
+        return buffer
 
-    def delete_image(self, document: StoredDocument) -> None:
-        self.client.delete_object(Bucket=document.root_location, Key=document.object_name)
+    def load_url(self, url: str) -> io.BytesIO:
+        """Load data from a url."""
+        bucket, _, object_name = url.replace("s3://", "").partition("/")
+        buffer = io.BytesIO()
+        self.client.download_fileobj(bucket, object_name, buffer)
+        return buffer
+
+    def delete_data(self, object_name: str) -> None:
+        """Delete data from the object store."""
+        self.client.delete_object(Bucket=self.root_location, Key=object_name)
 
     def close(self) -> None:
         self.client.close()
@@ -87,26 +83,25 @@ class S3Storage(ObjectStorage):
 class MemoryStorage(ObjectStorage):
     """An in-memory object store"""
 
+    url_prefixes = ["file://"]
+
     def __init__(self) -> None:
         self.root_location = "foo"
-        self.storage: dict[str, ImageDocument] = dict()
+        self.storage: dict[str, io.BytesIO] = dict()
 
-    def save_image(self, image: ImageDocument) -> StoredDocument:
-        object_name = str(ObjectId())
-        self.storage[object_name] = image
-        return StoredDocument(
-            root_location=self.root_location,
-            name=image.name,
-            object_name=object_name,
-            source_url=image.source_url,
-            page_number=image.page_number,
-        )
+    def save_data(self, data: io.BytesIO, object_name: str) -> None:
+        """Save data to the object store."""
+        self.storage[object_name] = data
 
-    def load_image(self, document: StoredDocument) -> ImageDocument:
-        return self.storage[document.object_name]
+    def read_data(self, object_name: str) -> io.BytesIO:
+        """Read data using the object store."""
+        return self.storage[object_name]
 
-    def delete_image(self, document: StoredDocument) -> None:
-        self.storage.pop(document.object_name, None)
+    def load_url(self, url: str) -> io.BytesIO:
+        """Load data from a url."""
+        with open(url.replace("file://", ""), "rb") as fid:
+            return io.BytesIO(fid.read())
 
-    def close(self):
-        pass
+    def delete_data(self, object_name: str) -> None:
+        """Delete data from the object store."""
+        self.storage.pop(object_name, None)

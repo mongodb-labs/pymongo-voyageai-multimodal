@@ -1,5 +1,8 @@
 import os
+import tempfile
+import urllib.request
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -75,6 +78,25 @@ def test_pdf_pages(client: PyMongoVoyageAI):
     query = "The consequences of a dictator's peace"
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
     images = client.url_to_images(url)
+    resp = client.add_documents(images)
+    client.wait_for_indexing()
+    data = client.similarity_search(query, extract_images=True)
+    assert len(data[0]["inputs"][0].image.tobytes()) > 0
+    assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
+    client.delete_by_ids([d["_id"] for d in resp])
+
+
+def test_pdf_pages_storage(client: PyMongoVoyageAI):
+    query = "The consequences of a dictator's peace"
+    url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
+    with urllib.request.urlopen(url) as response:
+        data = response.read()
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as fp:
+        fp.write(data)
+        fp.flush()
+        url = f"file://{Path(fp.name).as_posix()}"
+        images = client.url_to_images(url)
+        fp.close()
     resp = client.add_documents(images)
     client.wait_for_indexing()
     data = client.similarity_search(query, extract_images=True)

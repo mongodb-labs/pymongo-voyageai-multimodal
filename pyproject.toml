@@ -70,6 +70,7 @@ addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 xfail_strict = true
 filterwarnings = [
     "error",
+    "module:datetime.datetime.utcnow:DeprecationWarning", # from boto3
     "module:builtin type Swig:DeprecationWarning", # from pymupdf
     "module:builtin type swig:DeprecationWarning", # from pymupdf
 ]

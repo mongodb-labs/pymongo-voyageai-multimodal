@@ -5,6 +5,7 @@ from typing import Any
 from PIL import Image
 
 from .document import ImageDocument
+from .storage import ObjectStorage, S3Storage
 
 try:
     import fitz  # type:ignore[import-untyped]
@@ -17,13 +18,13 @@ TIMEOUT = 15
 INTERVAL = 1
 
 
-def pdf_url_to_images(
-    url: str, start: int | None = None, end: int | None = None, zoom: float = 1.0
+def pdf_data_to_images(
+    pdf_stream: io.BytesIO, start: int | None = None, end: int | None = None, zoom: float = 1.0
 ) -> list[Image.Image]:
-    """Extract images from a pdf url.
+    """Extract images from a pdf byte stream.
 
     Args:
-        url: The url to load the images from.
+        pdf_stream: The BytesIO object to load the images from.
         start: The start frame to use for the images.
         end: The end frame to use for the images.
         zoom: The zoom factor to apply to the images.
@@ -33,14 +34,8 @@ def pdf_url_to_images(
     """
     if fitz is None:
         raise ValueError("pymongo-voyageai requires PyMuPDF to read pdf files") from None
-    # Ensure that the URL is valid
-    if not url.startswith("http") and url.endswith(".pdf"):
-        raise ValueError("Invalid URL")
 
     # Read the PDF from the specified URL
-    with urllib.request.urlopen(url) as response:
-        pdf_data = response.read()
-    pdf_stream = io.BytesIO(pdf_data)
     pdf = fitz.open(stream=pdf_stream, filetype="pdf")
 
     images = []
@@ -57,7 +52,6 @@ def pdf_url_to_images(
         # Convert pixmap to PIL Image
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         images.append(img)
-    print("out of loop")
 
     # Close the document
     pdf.close()
@@ -67,6 +61,7 @@ def pdf_url_to_images(
 
 def url_to_images(
     url: str,
+    storage: ObjectStorage | None = None,
     metadata: dict[str, Any] | None = None,
     start: int = 0,
     end: int | None = None,
@@ -77,6 +72,7 @@ def url_to_images(
 
     Args:
         url: The url to load the images from.
+        storage: The storage object which can be used to load data from custom urls.
         metadata: A set of metadata to associate with the images.
         start: The start frame to use for the images.
         end: The end frame to use for the images.
@@ -90,6 +86,27 @@ def url_to_images(
     basename = url[i:]
     i = basename.rfind(".")
     name = basename[:i]
+
+    source = None
+    # Prefer to use our storage object to read the file data.
+    if storage and storage.url_prefixes:
+        for pattern in storage.url_prefixes:
+            if url.startswith(pattern):
+                source = storage.load_url(url)
+                break
+    # For parquet files that are not loaded by the storage object, let pandas handle the download.
+    if source is None and url.endswith(".parquet"):
+        source = url
+    # For s3 files that are not loaded by the storage object, create a temp S3Storage object.
+    if source is None and url.startswith("s3://"):
+        storage = S3Storage("")
+        source = storage.load_url(url)
+        storage.close()
+    # For all other files, use the native download.
+    if source is None:
+        with urllib.request.urlopen(url) as response:
+            source = io.BytesIO(response.read())
+
     if url.endswith(".parquet"):
         try:
             import pandas as pd
@@ -97,7 +114,7 @@ def url_to_images(
             raise ValueError("pymongo-voyageai requires pandas to read parquet files") from None
         if image_column is None:
             raise ValueError("Must supply and image field to read a parquet file")
-        column = pd.read_parquet(url, **kwargs)[image_column][start:end]
+        column = pd.read_parquet(source, **kwargs)[image_column][start:end]
         for idx, item in enumerate(column.tolist()):
             image = Image.open(io.BytesIO(item["bytes"]))
             images.append(
@@ -110,7 +127,7 @@ def url_to_images(
                 )
             )
     elif url.endswith(".pdf"):
-        for idx, img in enumerate(pdf_url_to_images(url, start=start, end=end, **kwargs)):
+        for idx, img in enumerate(pdf_data_to_images(source, start=start, end=end, **kwargs)):
             images.append(
                 ImageDocument(
                     image=img,
@@ -121,9 +138,7 @@ def url_to_images(
                 )
             )
     else:
-        with urllib.request.urlopen(url) as response:
-            image_data = response.read()
-        image = Image.open(io.BytesIO(image_data))
+        image = Image.open(source)
         if "transparency" in image.info and image.mode != "RGBA":
             image = image.convert("RGBA")
         images.append(ImageDocument(image=image, name=name, source_url=url, metadata=metadata))
