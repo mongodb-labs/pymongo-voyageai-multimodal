@@ -5,7 +5,7 @@ from typing import Any
 from PIL import Image
 
 from .document import ImageDocument
-from .storage import ObjectStorage
+from .storage import ObjectStorage, S3Storage
 
 try:
     import fitz  # type:ignore[import-untyped]
@@ -97,6 +97,11 @@ def url_to_images(
     # For parquet files that are not loaded by the storage object, let pandas handle the download.
     if source is None and url.endswith(".parquet"):
         source = url
+    # For s3 files that are not loaded by the storage object, create a temp S3Storage object.
+    if source is None and url.startswith("s3://"):
+        storage = S3Storage("")
+        source = storage.read_from_url(url)
+        storage.close()
     # For all other files, use the native download.
     if source is None:
         with urllib.request.urlopen(url) as response:
