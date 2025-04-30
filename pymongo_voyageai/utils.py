@@ -92,7 +92,7 @@ def url_to_images(
     if storage and storage.url_prefixes:
         for pattern in storage.url_prefixes:
             if url.startswith(pattern):
-                source = storage.read_from_url(url)
+                source = storage.load_url(url)
                 break
     # For parquet files that are not loaded by the storage object, let pandas handle the download.
     if source is None and url.endswith(".parquet"):
@@ -100,7 +100,7 @@ def url_to_images(
     # For s3 files that are not loaded by the storage object, create a temp S3Storage object.
     if source is None and url.startswith("s3://"):
         storage = S3Storage("")
-        source = storage.read_from_url(url)
+        source = storage.load_url(url)
         storage.close()
     # For all other files, use the native download.
     if source is None:
