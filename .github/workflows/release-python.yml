@@ -58,12 +58,16 @@ jobs:
   build-dist:
     needs: [pre-publish]
     uses: ./.github/workflows/dist.yml
+    permissions:
+      contents: read
     with:
       ref: ${{ needs.pre-publish.outputs.version }}
 
   static-scan:
     needs: [pre-publish]
     uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
     with:
       ref: ${{ needs.pre-publish.outputs.version }}
 
