@@ -2,6 +2,12 @@
 
 PyMongo integration with VoyageAI for multimodal embedding.
 
+## Installation
+
+```bash
+pip install --pre pymongo-voyageai
+```
+
 ## Quickstart
 
 ```python
