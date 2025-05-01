@@ -10,6 +10,8 @@ pip install --pre pymongo-voyageai
 
 ## Quickstart
 
+Obtain an API key for [VoyageAI](https://docs.voyageai.com/docs/api-key-and-installation).
+
 ```python
 from pymongo_voyageai import PyMongoVoyageAI
 
