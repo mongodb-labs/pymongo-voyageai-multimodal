@@ -60,6 +60,7 @@ jobs:
     uses: ./.github/workflows/dist.yml
     permissions:
       contents: read
+      actions: read
     with:
       ref: ${{ needs.pre-publish.outputs.version }}
 
@@ -67,6 +68,9 @@ jobs:
     needs: [pre-publish]
     uses: ./.github/workflows/codeql.yml
     permissions:
+      security-events: write
+      packages: read
+      actions: read
       contents: read
     with:
       ref: ${{ needs.pre-publish.outputs.version }}
