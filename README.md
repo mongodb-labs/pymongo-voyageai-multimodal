@@ -4,6 +4,8 @@ PyMongo integration with VoyageAI for multimodal embedding.
 
 ## Installation
 
+Requires Python 3.10+.
+
 ```bash
 pip install --pre pymongo-voyageai
 ```
