@@ -1,7 +1,9 @@
 import io
+import ssl
 import urllib.request
 from typing import Any
 
+import certifi
 from PIL import Image
 
 from .document import ImageDocument
@@ -104,7 +106,8 @@ def url_to_images(
         storage.close()
     # For all other files, use the native download.
     if source is None:
-        with urllib.request.urlopen(url) as response:
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(url, context=ssl_context) as response:
             source = io.BytesIO(response.read())
 
     if url.endswith(".parquet"):

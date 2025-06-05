@@ -1,10 +1,12 @@
 import os
+import ssl
 import tempfile
 import urllib.request
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
+import certifi
 import pytest
 
 from pymongo_voyageai import MemoryStorage, PyMongoVoyageAI
@@ -89,7 +91,8 @@ def test_pdf_pages(client: PyMongoVoyageAI):
 def test_pdf_pages_storage(client: PyMongoVoyageAI):
     query = "The consequences of a dictator's peace"
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
-    with urllib.request.urlopen(url) as response:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    with urllib.request.urlopen(url, context=ssl_context) as response:
         data = response.read()
     with tempfile.NamedTemporaryFile(suffix=".pdf") as fp:
         fp.write(data)
