@@ -1,7 +1,9 @@
 import os
+import ssl
 import urllib.request
 from collections.abc import Generator
 
+import certifi
 import numpy as np
 import pytest
 from bson import ObjectId
@@ -82,7 +84,8 @@ def test_pdf_pages_storage(client: PyMongoVoyageAI):
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
     storage = client._storage
     object_name = f"{ObjectId()}.pdf"
-    with urllib.request.urlopen(url) as response:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    with urllib.request.urlopen(url, context=ssl_context) as response:
         storage.client.upload_fileobj(response, storage.root_location, object_name)
     url = f"s3://{storage.root_location}/{object_name}"
     images = client.url_to_images(url)
@@ -100,7 +103,8 @@ def test_pdf_pages_custom_storage(client: PyMongoVoyageAI):
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
     storage = client._storage
     object_name = f"{ObjectId()}.pdf"
-    with urllib.request.urlopen(url) as response:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    with urllib.request.urlopen(url, context=ssl_context) as response:
         storage.client.upload_fileobj(response, storage.root_location, object_name)
     url = f"s3://{storage.root_location}/{object_name}"
     client._storage = MemoryStorage()
