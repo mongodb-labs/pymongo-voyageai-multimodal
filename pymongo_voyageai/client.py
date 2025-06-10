@@ -341,7 +341,6 @@ class PyMongoVoyageAI:
         Args:
             inputs: List of inputs to add to the vectorstore, which are each a list of documents.
             ids: Optional list of unique ids that will be used as index in VectorStore.
-                See note on ids in add_texts.
             batch_size: Number of documents to insert at a time.
                 Tuning this may help with performance and sidestep MongoDB limits.
             kwargs: Additional keyword args for future expansion.
@@ -426,7 +425,6 @@ class PyMongoVoyageAI:
         Args:
             inputs: List of inputs to add to the vectorstore, which are each a list of documents.
             ids: Optional list of unique ids that will be used as index in VectorStore.
-                See note on ids in add_texts.
             batch_size: Number of documents to insert at a time.
                 Tuning this may help with performance and sidestep MongoDB limits.
             kwargs: Additional keyword args for future expansion.
