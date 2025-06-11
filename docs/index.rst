@@ -1,21 +1,21 @@
-PyMongo-VoyageAI
-================
+PyMongo-VoyageAI-Multimodal
+===========================
 
 
 Quickstart
 ----------
 
-First, install PyMongo-VoyageAI:
+First, install PyMongo-VoyageAI-MultiModal:
 
 .. code-block:: bash
 
-    $ pip install pymongo-voyageai
+    $ pip install pymongo-voyageai-mulitmodal
 
 Then, perform the multi-modal embedding:
 
 .. code-block:: python
 
-    from pymongo_voyageai import PyMongoVoyageAI
+    from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
     # Create our client.
     client = PyMongoVoyageAI(

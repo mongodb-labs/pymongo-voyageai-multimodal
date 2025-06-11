@@ -4,27 +4,27 @@ API
 Classes
 -------
 
-.. autoclass:: pymongo_voyageai.PyMongoVoyageAI
+.. autoclass:: pymongo_voyageai_multimodal.PyMongoVoyageAI
    :members:
 
    .. automethod:: __init__
 
-.. autoclass:: pymongo_voyageai.ImageDocument
+.. autoclass:: pymongo_voyageai_multimodal.ImageDocument
 
-.. autoclass:: pymongo_voyageai.TextDocument
+.. autoclass:: pymongo_voyageai_multimodal.TextDocument
 
-.. autoclass:: pymongo_voyageai.StoredDocument
+.. autoclass:: pymongo_voyageai_multimodal.StoredDocument
 
-.. autoclass:: pymongo_voyageai.S3Storage
+.. autoclass:: pymongo_voyageai_multimodal.S3Storage
 
     .. automethod:: __init__
 
-.. autoclass:: pymongo_voyageai.MemoryStorage
+.. autoclass:: pymongo_voyageai_multimodal.MemoryStorage
    :members:
 
-.. autoclass:: pymongo_voyageai.ObjectStorage
+.. autoclass:: pymongo_voyageai_multimodal.ObjectStorage
    :members:
 
-.. autoclass:: pymongo_voyageai.DocumentType
+.. autoclass:: pymongo_voyageai_multimodal.DocumentType
 
-.. autoclass:: pymongo_voyageai.Document
+.. autoclass:: pymongo_voyageai_multimodal.Document

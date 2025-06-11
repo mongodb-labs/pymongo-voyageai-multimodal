@@ -9,7 +9,7 @@ from typing import Any
 import certifi
 import pytest
 
-from pymongo_voyageai import MemoryStorage, PyMongoVoyageAI
+from pymongo_voyageai_multimodal import MemoryStorage, PyMongoVoyageAI
 
 # mypy: disable_error_code="no-untyped-def"
 

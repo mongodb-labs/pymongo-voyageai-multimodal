@@ -57,7 +57,7 @@ class PyMongoVoyageAI:
 
             import os
             from pymongo import MongoClient
-            from pymongo_voyageai import PyMongoVoyageAI
+            from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
             client = PyMongoVoyageAI.from_connection_string(
                 connection_string=os.environ["MONGODB_ATLAS_CONNECTION_STRING"],
@@ -70,7 +70,7 @@ class PyMongoVoyageAI:
     Add Documents:
         .. code-block:: python
 
-            from pymongo_voyageai import TextDocument, ImageDocument
+            from pymongo_voyageai_multimodal import TextDocument, ImageDocument
 
             text = TextDocument(text="foo", metadata={"baz": "bar"})
             images = client.url_to_images(
