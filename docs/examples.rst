@@ -7,7 +7,7 @@ Querying Against PDF Pages
 .. code-block:: python
 
     import os
-    from pymongo_voyageai import PyMongoVoyageAI
+    from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
@@ -37,7 +37,7 @@ Querying Against Parquet Data
 .. code-block:: python
 
     import os
-    from pymongo_voyageai import PyMongoVoyageAI
+    from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
@@ -66,7 +66,7 @@ Combining Text and Images
 .. code-block:: python
 
     import os
-    from pymongo_voyageai import PyMongoVoyageAI
+    from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
@@ -105,7 +105,7 @@ If you already have data stored in S3, you can use an ``s3://`` url to load the 
 .. code-block:: python
 
     import os
-    from pymongo_voyageai import PyMongoVoyageAI
+    from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],
@@ -135,7 +135,7 @@ Using Async API
 .. code-block:: python
 
     import os
-    from pymongo_voyageai import PyMongoVoyageAI
+    from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
     client = PyMongoVoyageAI(
         voyageai_api_key=os.environ["VOYAGEAI_API_KEY"],

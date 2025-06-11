@@ -53,7 +53,7 @@ jobs:
         run: |
           python -m pip install dist/*.gz
           cd ..
-          python -c "from pymongo_voyageai import PyMongoVoyageAI"
+          python -c "from pymongo_voyageai_multimodal import PyMongoVoyageAI"
 
       - uses: actions/upload-artifact@v4
         with:
