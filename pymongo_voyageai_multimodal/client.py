@@ -173,8 +173,8 @@ class PyMongoVoyageAI:
         """
         self._dimensions = dimensions  # the size of the VoyageAI model.
         self._vo = voyageai_client or Client(api_key=voyageai_api_key)
-        driver = (
-            DriverInfo(name="multimodal-search", version=version("pymongo-voyageai-multimodal")),
+        driver = DriverInfo(
+            name="multimodal-search", version=version("pymongo-voyageai-multimodal")
         )
         self._mo = mongo_client or MongoClient(mongo_connection_string, driver=driver)
         self._index_name = index_name
