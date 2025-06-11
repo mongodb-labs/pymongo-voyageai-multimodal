@@ -1,5 +1,5 @@
 #
-# PyMongo-VoyageAI documentation build configuration file, created by
+# PyMongo-VoyageAI-Multimodal documentation build configuration file, created by
 # sphinx-quickstart on Mon Dec 26 10:16:15 2011.
 #
 # This file is execfile()d with the current directory set to its containing dir.
@@ -18,7 +18,7 @@ import furo  # type:ignore[import-untyped] # noqa: F401
 
 sys.path.insert(0, os.path.abspath(".."))
 
-from pymongo_voyageai._version import __version__
+from pymongo_voyageai_multimodal._version import __version__
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -54,7 +54,7 @@ source_suffix = ".rst"
 master_doc = "index"
 
 # General information about the project.
-project = "PyMongo-VoyageAI"
+project = "PyMongo-VoyageAI-Multimodal"
 copyright = "2025, MongoDB"
 
 # The version info for the project you"re documenting, acts as replacement for

@@ -1,6 +1,6 @@
 from PIL import Image
 
-from pymongo_voyageai.utils import url_to_images
+from pymongo_voyageai_multimodal.utils import url_to_images
 
 
 def test_url_to_images_parquet():

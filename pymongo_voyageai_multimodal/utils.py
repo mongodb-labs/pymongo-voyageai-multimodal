@@ -35,7 +35,7 @@ def pdf_data_to_images(
         A list of image objects.
     """
     if fitz is None:
-        raise ValueError("pymongo-voyageai requires PyMuPDF to read pdf files") from None
+        raise ValueError("pymongo-voyageai-multimodal requires PyMuPDF to read pdf files") from None
 
     # Read the PDF from the specified URL
     pdf = fitz.open(stream=pdf_stream, filetype="pdf")
@@ -114,7 +114,9 @@ def url_to_images(
         try:
             import pandas as pd
         except ImportError:
-            raise ValueError("pymongo-voyageai requires pandas to read parquet files") from None
+            raise ValueError(
+                "pymongo-voyageai-multimodal requires pandas to read parquet files"
+            ) from None
         if image_column is None:
             raise ValueError("Must supply and image field to read a parquet file")
         column = pd.read_parquet(source, **kwargs)[image_column][start:end]

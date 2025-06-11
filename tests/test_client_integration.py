@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from bson import ObjectId
 
-from pymongo_voyageai import MemoryStorage, PyMongoVoyageAI
+from pymongo_voyageai_multimodal import MemoryStorage, PyMongoVoyageAI
 
 if "VOYAGEAI_API_KEY" not in os.environ:
     pytest.skip("Requires VoyageAI API Key.", allow_module_level=True)

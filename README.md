@@ -1,4 +1,4 @@
-# PyMongo-VoyageAI
+# PyMongo-VoyageAI-Multimodal
 
 PyMongo integration with VoyageAI for multimodal embedding.
 
@@ -7,7 +7,7 @@ PyMongo integration with VoyageAI for multimodal embedding.
 Requires Python 3.10+.
 
 ```bash
-pip install --pre pymongo-voyageai
+pip install --pre pymongo-voyageai-multimodal
 ```
 
 ## Quickstart
@@ -15,7 +15,7 @@ pip install --pre pymongo-voyageai
 Obtain an API key for [VoyageAI](https://docs.voyageai.com/docs/api-key-and-installation).
 
 ```python
-from pymongo_voyageai import PyMongoVoyageAI
+from pymongo_voyageai_multimodal import PyMongoVoyageAI
 
 # Create our client.
 client = PyMongoVoyageAI(

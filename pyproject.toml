@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pymongo-voyageai"
+name = "pymongo-voyageai-multimodal"
 dynamic = ["version"]
 description = "PyMongo integration with VoyageAI for multimodal embedding"
 readme = "README.md"
@@ -36,8 +36,8 @@ dependencies = [
 ]
 
 [project.urls]
-Download = "https://github.com/mongodb-labs/pymongo-voyageai/tags"
-Homepage = "http://pymongo-voyageai.readthedocs.org/"
+Download = "https://github.com/mongodb-labs/pymongo-voyageai-multimodal/tags"
+Homepage = "http://pymongo-voyageai-multimodal.readthedocs.org/"
 
 [dependency-groups]
 dev = [
@@ -57,11 +57,11 @@ dev = [
 
 
 [tool.hatch.version]
-path = "pymongo_voyageai/_version.py"
+path = "pymongo_voyageai_multimodal/_version.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/pymongo_voyageai",
+    "/pymongo_voyageai_multimodal",
 ]
 
 
