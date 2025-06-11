@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import logging
 from collections.abc import Mapping, Sequence
+from importlib.metadata import version
 from time import monotonic, sleep
 from typing import Any
 
@@ -14,6 +15,7 @@ from langchain_mongodb.utils import make_serializable
 from langchain_mongodb.vectorstores import DEFAULT_INSERT_BATCH_SIZE
 from PIL import Image
 from pymongo import MongoClient, ReplaceOne
+from pymongo.driver_info import DriverInfo
 from voyageai.client import Client
 
 from .document import Document, DocumentType, ImageDocument, StoredDocument, TextDocument
@@ -171,8 +173,10 @@ class PyMongoVoyageAI:
         """
         self._dimensions = dimensions  # the size of the VoyageAI model.
         self._vo = voyageai_client or Client(api_key=voyageai_api_key)
-        # TODO: driver=DriverInfo(name="Langchain", version=version("langchain-mongodb")),
-        self._mo = mongo_client or MongoClient(mongo_connection_string)
+        driver = (
+            DriverInfo(name="multimodal-search", version=version("pymongo-voyageai-multimodal")),
+        )
+        self._mo = mongo_client or MongoClient(mongo_connection_string, driver=driver)
         self._index_name = index_name
         self._embedding_key = embedding_key
         self._relevance_score_fn = relevance_score_fn
