@@ -9,7 +9,7 @@ First, install PyMongo-VoyageAI-MultiModal:
 
 .. code-block:: bash
 
-    $ pip install pymongo-voyageai-mulitmodal
+    $ pip install pymongo-voyageai-multimodal
 
 Then, perform the multi-modal embedding:
 
