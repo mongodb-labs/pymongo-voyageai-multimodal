@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
         fetch-depth: 0
@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
     name: CPython ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -67,7 +67,7 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
         fetch-depth: 0
