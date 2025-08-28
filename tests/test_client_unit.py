@@ -52,7 +52,7 @@ def test_image_set(client: PyMongoVoyageAI):
     url = "hf://datasets/princeton-nlp/CharXiv/val.parquet"
     documents = client.url_to_images(url, image_column="image", end=3)
     resp = client.add_documents(documents)
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     query = "3D loss landscapes for different training strategies"
     data = client.similarity_search(query, extract_images=True)
     assert len(data[0]["inputs"][0].image.tobytes()) > 0
@@ -71,7 +71,7 @@ def test_text_and_images(client: PyMongoVoyageAI):
             [image, text],  # 3. image + text
         ]
     )
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
     client.delete_by_ids([d["_id"] for d in resp])
 
@@ -81,7 +81,7 @@ def test_pdf_pages(client: PyMongoVoyageAI):
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
     images = client.url_to_images(url)
     resp = client.add_documents(images)
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     data = client.similarity_search(query, extract_images=True)
     assert len(data[0]["inputs"][0].image.tobytes()) > 0
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
@@ -101,7 +101,7 @@ def test_pdf_pages_storage(client: PyMongoVoyageAI):
         images = client.url_to_images(url)
         fp.close()
     resp = client.add_documents(images)
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     data = client.similarity_search(query, extract_images=True)
     assert len(data[0]["inputs"][0].image.tobytes()) > 0
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)

@@ -71,7 +71,7 @@ def test_pdf_pages(client: PyMongoVoyageAI):
     url = "https://www.fdrlibrary.org/documents/356632/390886/readingcopy.pdf"
     images = client.url_to_images(url)
     resp = client.add_documents(images)
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     data = client.similarity_search(query, extract_images=False)
     # We expect page 5 to be the best match.
     assert data[0]["inputs"][0].page_number == 5
@@ -90,7 +90,7 @@ def test_pdf_pages_storage(client: PyMongoVoyageAI):
     url = f"s3://{storage.root_location}/{object_name}"
     images = client.url_to_images(url)
     resp = client.add_documents(images)
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     data = client.similarity_search(query, extract_images=True)
     assert len(data[0]["inputs"][0].image.tobytes()) > 0
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
@@ -110,7 +110,7 @@ def test_pdf_pages_custom_storage(client: PyMongoVoyageAI):
     client._storage = MemoryStorage()
     images = client.url_to_images(url)
     resp = client.add_documents(images)
-    client.wait_for_indexing()
+    client.wait_for_indexing(timeout=30)
     data = client.similarity_search(query, extract_images=True)
     assert len(data[0]["inputs"][0].image.tobytes()) > 0
     assert len(client.get_by_ids([d["_id"] for d in resp])) == len(resp)
@@ -123,7 +123,7 @@ async def test_image_set_async(client: PyMongoVoyageAI):
     url = "hf://datasets/princeton-nlp/CharXiv/val.parquet"
     documents = await client.aurl_to_images(url, image_column="image", end=3)
     resp = await client.aadd_documents(documents)
-    await client.await_for_indexing()
+    await client.wait_for_indexing(timeout=30)
     query = "3D loss landscapes for different training strategies"
     data = await client.asimilarity_search(query, extract_images=True)
     # The best match should be the third input image.
