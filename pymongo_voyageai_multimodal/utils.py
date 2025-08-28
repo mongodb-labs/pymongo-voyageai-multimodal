@@ -16,7 +16,7 @@ except ImportError:
 
 
 DEFAULT_MODEL_NAME = "voyage-multimodal-3"
-TIMEOUT = 15
+TIMEOUT = 20
 INTERVAL = 1
 
 
