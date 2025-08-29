@@ -2,7 +2,7 @@
 
 ______________________________________________________________________
 
-## Changes in version 0.1.1 (2025/08/28)
+## Changes in version 0.1.1 (2025/09/02)
 
 - Increase default timeout in `wait_for_indexing` method and `auto_index_timeout` parameter to 60 seconds.
 
