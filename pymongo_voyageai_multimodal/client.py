@@ -177,6 +177,11 @@ class PyMongoVoyageAI:
             name="multimodal-search", version=version("pymongo-voyageai-multimodal")
         )
         self._mo = mongo_client or MongoClient(mongo_connection_string, driver=driver)
+        if mongo_client:
+            # append_metadata was added in PyMongo 4.14.0, but is a valid database name on earlier
+            # versions
+            if callable(mongo_client.append_metadata):
+                mongo_client.append_metadata(driver)
         self._index_name = index_name
         self._embedding_key = embedding_key
         self._relevance_score_fn = relevance_score_fn
