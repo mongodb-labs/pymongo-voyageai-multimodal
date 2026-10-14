@@ -2,6 +2,10 @@
 
 ______________________________________________________________________
 
+## Changes in version 0.3.0 (unreleased)
+
+- Drop support for Python 3.10.
+
 ## Changes in version 0.2.0 (2025/10/02)
 
 - Add DriverInfo metadata to provided clients.
