@@ -18,6 +18,6 @@ def test_url_to_images_pdf():
 
 
 def test_url_to_images_png():
-    documents = url_to_images("https://www.voyageai.com/header-bg.png")
+    documents = url_to_images("https://www.voyageai.com/social-tile.png")
     assert len(documents) == 1
     assert isinstance(documents[0].image, Image.Image)
