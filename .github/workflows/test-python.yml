@@ -14,7 +14,7 @@ defaults:
     shell: bash -eux {0}
 
 env:
-  MIN_PYTHON: "3.10"
+  MIN_PYTHON: "3.11"
 
 jobs:
   static:
@@ -42,7 +42,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
       fail-fast: false
     name: CPython ${{ matrix.python-version }}
     steps:
