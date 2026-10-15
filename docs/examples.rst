@@ -77,7 +77,7 @@ Combining Text and Images
     )
 
     text = "Voyage AI makes best-in-class embedding models and rerankers."
-    images = client.url_to_images("https://www.voyageai.com/header-bg.png")
+    images = client.url_to_images("https://www.voyageai.com/social-tile.png")
     image = images[0].image
     resp = client.add_documents(
         [
