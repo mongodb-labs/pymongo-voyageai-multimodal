@@ -32,11 +32,11 @@ jobs:
     name: Make Dist
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           # Build sdist on lowest supported Python
           python-version: '3.11'
