@@ -70,6 +70,7 @@ include = [
 minversion = "8.0"
 addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 xfail_strict = true
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "error",
     "module:datetime.datetime.utcnow:DeprecationWarning", # from boto3
