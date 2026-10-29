@@ -75,6 +75,7 @@ filterwarnings = [
     "module:datetime.datetime.utcnow:DeprecationWarning", # from boto3
     "module:builtin type Swig:DeprecationWarning", # from pymupdf
     "module:builtin type swig:DeprecationWarning", # from pymupdf
+    "module:.*ByteString.*:DeprecationWarning", # from pymupdf on Python 3.15
 ]
 log_cli_level = "info"
 testpaths = [
