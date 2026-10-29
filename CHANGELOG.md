@@ -4,6 +4,7 @@ ______________________________________________________________________
 
 ## Changes in version 0.3.0 (unreleased)
 
+- Add support for Python 3.14 and 3.15.
 - Drop support for Python 3.10.
 
 ## Changes in version 0.2.0 (2025/10/02)
