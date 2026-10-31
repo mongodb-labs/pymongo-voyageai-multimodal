@@ -10,9 +10,9 @@ from .document import ImageDocument
 from .storage import ObjectStorage, S3Storage
 
 try:
-    import fitz  # type:ignore[import-untyped]
+    import pymupdf  # type: ignore[import-untyped]
 except ImportError:
-    fitz = None
+    pymupdf = None
 
 
 DEFAULT_MODEL_NAME = "voyage-multimodal-3"
@@ -34,16 +34,16 @@ def pdf_data_to_images(
     Returns:
         A list of image objects.
     """
-    if fitz is None:
+    if pymupdf is None:
         raise ValueError("pymongo-voyageai-multimodal requires PyMuPDF to read pdf files") from None
 
     # Read the PDF from the specified URL
-    pdf = fitz.open(stream=pdf_stream, filetype="pdf")
+    pdf = pymupdf.open(stream=pdf_stream, filetype="pdf")
 
     images = []
 
     # Loop through each page, render as pixmap, and convert to PIL Image
-    mat = fitz.Matrix(zoom, zoom)
+    mat = pymupdf.Matrix(zoom, zoom)
     start = start or 0
     end = end or pdf.page_count - 1
     for n in range(pdf.page_count):
